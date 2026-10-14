@@ -15,13 +15,17 @@ sns.set_palette("colorblind")
 # Carrega todos os migration_*.csv. Arquivos *_power têm CSV comum;
 # arquivos *_policy vêm do CloudletsTableBuilder e possuem uma segunda linha
 # de unidades, por isso o skiprows=2.
-def load_data(migration_results_dir='../migrations_results'):
+def load_data(migration_results_dir='migrations_results') -> dict:
     """Load all CSV files with migration data from migrations_results directory"""
     data_files = {}
-    results_path = Path(migration_results_dir)
+    results_path = Path(__file__).resolve().parent.parent /f'{migration_results_dir}'
+
+    print(f"Caminho absoluto verificado: {results_path}")
+    print(f"A pasta existe? {results_path.exists()}")
 
     for file_path in results_path.glob('migration_*.csv'):
         strategy_name = file_path.stem.replace('migration_', '')
+        print(strategy_name)
         if 'power' in strategy_name:
             df = pd.read_csv(file_path)
             data_files[strategy_name] = df
@@ -37,7 +41,8 @@ def load_data(migration_results_dir='../migrations_results'):
             # Now read the data, skipping the first row (column names) and the second row (units)
             df = pd.read_csv(file_path, skiprows=2, names=column_names)
             data_files[strategy_name] = df
-
+    else:
+        print("Empty")
     return data_files
 
 # Resume potência/energia por estratégia. "active_hosts" aqui significa
@@ -304,7 +309,7 @@ def main():
 
     data = load_data()
 
-    power_data = {k: v for k, v in data.items() if 'power' in k}
+    power_data = {k: v for k, v in data.items() if 'power' in k} # Saída vazio
     policy_data = {k: v for k, v in data.items() if 'policy' in k}
 
     os.makedirs('plots', exist_ok=True)

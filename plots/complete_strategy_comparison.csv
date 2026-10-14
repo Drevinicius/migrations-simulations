@@ -1,0 +1,3 @@
+Strategy,Total Power (W),Average Power (W),Total Energy (Wh),Active Hosts,Total Exec Time (s),Avg Exec Time (s),Max Exec Time (s),Min Exec Time (s),Cloudlet Count
+first_fit,9146.17,91.4611,63.39,61,1717.3000000000002,11.448666666666668,24.7,10.4,150
+best_fit,9235.22,92.3522,43.87,59,1565.0,10.433333333333334,11.4,10.4,150
