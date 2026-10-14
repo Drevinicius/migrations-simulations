@@ -15,7 +15,11 @@ Este projeto realiza simulações avançadas de migração de Máquinas Virtuais
 # 🚀 Como Executar as Simulações
 O repositório inclui scripts automatizados para compilar o projeto Maven, copiar dependências e executar as políticas de migração em processos separados, garantindo a formatação correta dos resultados:
 - Para Linux / macOS:
-sh ./execute_migrations.sh´´´[cite: 1]
+```sh
+sh ./execute_migrations.sh
+```
 
 - Para Windows:
-sh ./execute_migrations_windows.sh```[cite: 2]
+```sh
+sh ./execute_migrations_windows.sh
+```
