@@ -51,8 +51,8 @@ public final class MigrationBestFitPolicy {
   private final CloudSimPlus simulation;
   private VmAllocationPolicyMigrationStaticThreshold allocationPolicy;
   private List<Host> hostList;
-  // Array de 1 posição é usado como um "inteiro mutável" para Shared.startMigration().
-  private final int[] migrationsNumber = {0};
+  // Rastreia migrações iniciadas, concluídas com sucesso e falhas.
+  private final MigrationTracker migrationTracker = new MigrationTracker();
 
   public static void main(String[] args) {
     new MigrationBestFitPolicy();
@@ -73,9 +73,9 @@ public final class MigrationBestFitPolicy {
     // Motor de eventos discretos: o clock aqui é tempo SIMULADO, não tempo de CPU real.
     simulation = new CloudSimPlus();
 
-    @SuppressWarnings("unused")
     // Cria a infraestrutura física e instala a política de migração.
     final Datacenter datacenter0 = createDatacenter();
+    datacenter0.addOnVmMigrationFinishListener(migrationTracker::recordResult);
     // Broker representa o usuário/orquestrador que submete VMs e Cloudlets.
     broker = new DatacenterBrokerSimple(simulation);
     createAndSubmitVms(broker);
@@ -116,7 +116,19 @@ public final class MigrationBestFitPolicy {
         "%nHosts CPU usage History (when the allocated MIPS is lower than the requested, it is due to VM migration overhead)%n");
 
     hostList.stream().filter(h -> h.getId() <= 2).forEach(Shared::printHostStateHistory);
-    System.out.printf("Number of VM migrations: %d%n", migrationsNumber[0]);
+    migrationTracker.printSummary();
+
+    try {
+      MigrationCsvWriter.writeOrUpdate("best_fit", migrationTracker);
+    } catch (final IOException e) {
+      System.err.println("Error writing migration counts CSV: " + e.getMessage());
+    }
+
+    try {
+      SimulationCsvWriter.writeOrUpdate("best_fit", broker);
+    } catch (final IOException e) {
+      System.err.println("Error writing simulation counts CSV: " + e.getMessage());
+    }
 
     Shared.printPowerConsumptionSummary(hostList, simulation);
 
@@ -124,7 +136,8 @@ public final class MigrationBestFitPolicy {
   }
 
   private void startMigration(final VmHostEventInfo info) {
-    Shared.startMigration(migrationsNumber, simulation, info);
+    migrationTracker.recordStart(info);
+    Shared.startMigration(migrationTracker.getStarted(), simulation, info);
   }
 
   private void finishMigration(final VmHostEventInfo info) {
