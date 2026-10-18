@@ -1,351 +1,1501 @@
-# ---------------------------------------------------------------------------
-# LEITURA DIDÁTICA
-# Este arquivo NÃO executa a simulação. Ele apenas lê os CSVs gerados pelo Java,
-# calcula estatísticas e cria gráficos/tabela comparativa.
-# ---------------------------------------------------------------------------
 import os
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
 
 plt.style.use('ggplot')
 sns.set_palette("colorblind")
 
-# Carrega todos os migration_*.csv. Arquivos *_power têm CSV comum;
-# arquivos *_policy vêm do CloudletsTableBuilder e possuem uma segunda linha
-# de unidades, por isso o skiprows=2.
-def load_data(migration_results_dir='migrations_results') -> dict:
-    """Load all CSV files with migration data from migrations_results directory"""
-    data_files = {}
-    results_path = Path(__file__).resolve().parent.parent /f'{migration_results_dir}'
 
-    print(f"Caminho absoluto verificado: {results_path}")
-    print(f"A pasta existe? {results_path.exists()}")
+# ---------------------------------------------------------------------------
+# CAMINHOS
+# ---------------------------------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = BASE_DIR.parent / 'migrations_results'
+PLOTS_DIR = BASE_DIR / 'plots'
+
+
+# ---------------------------------------------------------------------------
+# DESCOBERTA E CARREGAMENTO DAS ESTRATÉGIAS
+# ---------------------------------------------------------------------------
+
+def load_policy_csv(file_path):
+    """
+    Carrega um CSV gerado pelo CloudletsTableBuilder.
+
+    Esses arquivos possuem:
+    - linha 1: nomes das colunas;
+    - linha 2: unidades;
+    - demais linhas: dados das Cloudlets.
+    """
+
+    with open(file_path, 'r') as file:
+        header_line = file.readline().strip()
+
+    column_names = [
+        column.strip()
+        for column in header_line.split(',')
+    ]
+
+    return pd.read_csv(
+        file_path,
+        skiprows=2,
+        names=column_names
+    )
+
+
+def load_migration_counts(file_path):
+    """
+    Carrega migration_counts.csv e normaliza o formato.
+
+    Formato atual esperado:
+
+    Strategy,
+    StartedMigrations,
+    CompletedMigrations,
+    SuccessfulMigrations,
+    FailedMigrations,
+    UnfinishedMigrations
+
+    Também mantém compatibilidade com o formato anterior,
+    que utilizava Migrations no lugar de StartedMigrations.
+    """
+
+    df = pd.read_csv(file_path)
+
+    # Compatibilidade com o CSV antigo.
+    if (
+        'StartedMigrations' not in df.columns
+        and 'Migrations' in df.columns
+    ):
+        df = df.rename(
+            columns={
+                'Migrations': 'StartedMigrations'
+            }
+        )
+
+    numeric_columns = [
+        'StartedMigrations',
+        'CompletedMigrations',
+        'SuccessfulMigrations',
+        'FailedMigrations',
+        'UnfinishedMigrations'
+    ]
+
+    for column in numeric_columns:
+        if column in df.columns:
+            df[column] = pd.to_numeric(
+                df[column],
+                errors='coerce'
+            ).fillna(0).astype(int)
+
+    # Compatibilidade caso o CSV ainda não possua CompletedMigrations.
+    if (
+        'CompletedMigrations' not in df.columns
+        and 'SuccessfulMigrations' in df.columns
+        and 'FailedMigrations' in df.columns
+    ):
+        df['CompletedMigrations'] = (
+            df['SuccessfulMigrations']
+            + df['FailedMigrations']
+        )
+
+    required_columns = [
+        'Strategy',
+        'StartedMigrations',
+        'CompletedMigrations',
+        'SuccessfulMigrations',
+        'FailedMigrations',
+        'UnfinishedMigrations'
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in df.columns
+    ]
+
+    if missing_columns:
+        print(
+            'Warning: migration_counts.csv is missing columns: '
+            + ', '.join(missing_columns)
+        )
+
+        return pd.DataFrame()
+
+    return df
+
+
+def load_simulation_counts(file_path):
+    """
+    Carrega simulation_counts.csv.
+
+    O arquivo é gerado pelo Java ao final de cada estratégia e contém:
+
+        Strategy,SubmittedCloudlets,FinishedCloudlets
+
+    Esses valores representam o estado real mantido pelo Broker e são
+    utilizados para validar se todas as Cloudlets submetidas terminaram.
+    """
+
+    df = pd.read_csv(file_path)
+
+    required_columns = [
+        'Strategy',
+        'SubmittedCloudlets',
+        'FinishedCloudlets'
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in df.columns
+    ]
+
+    if missing_columns:
+        print(
+            'Warning: simulation_counts.csv is missing columns: '
+            + ', '.join(missing_columns)
+        )
+        return pd.DataFrame()
+
+    for column in [
+        'SubmittedCloudlets',
+        'FinishedCloudlets'
+    ]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors='coerce'
+        ).fillna(0).astype(int)
+
+    return df
+
+
+def discover_strategies(
+        migration_results_dir=RESULTS_DIR):
+    """
+    Descobre automaticamente todas as estratégias disponíveis.
+
+    Convenção de arquivos:
+
+        migration_<strategy>_policy.csv
+        migration_<strategy>_power.csv
+
+    Exemplo:
+
+        migration_best_fit_policy.csv
+            -> strategy = best_fit
+
+        migration_worst_fit_power.csv
+            -> strategy = worst_fit
+
+    O resultado possui a estrutura:
+
+        {
+            'best_fit': {
+                'policy': DataFrame,
+                'power': DataFrame,
+                'migrations': {...}
+            }
+        }
+    """
+
+    strategies = {}
+
+    results_path = Path(migration_results_dir)
+
+    print(f'Caminho absoluto verificado: {results_path}')
+    print(f'A pasta existe? {results_path.exists()}')
+
+    if not results_path.exists():
+        print('Migration results directory not found.')
+        return strategies
+
+    # ------------------------------------------------------------------
+    # Descobre arquivos de policy e power.
+    # ------------------------------------------------------------------
 
     for file_path in results_path.glob('migration_*.csv'):
-        strategy_name = file_path.stem.replace('migration_', '')
-        print(strategy_name)
-        if 'power' in strategy_name:
-            df = pd.read_csv(file_path)
-            data_files[strategy_name] = df
-        elif 'policy' in strategy_name:
-            # For policy files, we need to skip the first row and fix column names
-            # First read the header to get column names
-            with open(file_path, 'r') as f:
-                header_line = f.readline().strip()
 
-            # Clean up column names - they have a specific format with commas and spaces
-            column_names = [col.strip() for col in header_line.split(',')]
+        filename = file_path.stem
 
-            # Now read the data, skipping the first row (column names) and the second row (units)
-            df = pd.read_csv(file_path, skiprows=2, names=column_names)
-            data_files[strategy_name] = df
+        # migration_counts.csv é tratado separadamente.
+        if filename == 'migration_counts':
+            continue
+
+        strategy_name = None
+        data_type = None
+
+        # --------------------------------------------------------------
+        # migration_<strategy>_policy.csv
+        # --------------------------------------------------------------
+        if (
+            filename.startswith('migration_')
+            and filename.endswith('_policy')
+        ):
+            strategy_name = filename[
+                len('migration_'):
+                -len('_policy')
+            ]
+
+            data_type = 'policy'
+
+        # --------------------------------------------------------------
+        # migration_<strategy>_power.csv
+        # --------------------------------------------------------------
+        elif (
+            filename.startswith('migration_')
+            and filename.endswith('_power')
+        ):
+            strategy_name = filename[
+                len('migration_'):
+                -len('_power')
+            ]
+
+            data_type = 'power'
+
+        else:
+            print(
+                f'Warning: unrecognized migration file ignored: '
+                f'{file_path.name}'
+            )
+            continue
+
+        if not strategy_name:
+            continue
+
+        # Cria a estratégia caso ainda não exista.
+        strategies.setdefault(
+            strategy_name,
+            {}
+        )
+
+        # --------------------------------------------------------------
+        # Carrega os dados.
+        # --------------------------------------------------------------
+        if data_type == 'policy':
+
+            print(
+                f'Loading policy data for strategy: '
+                f'{strategy_name}'
+            )
+
+            strategies[strategy_name]['policy'] = (
+                load_policy_csv(file_path)
+            )
+
+        elif data_type == 'power':
+
+            print(
+                f'Loading power data for strategy: '
+                f'{strategy_name}'
+            )
+
+            strategies[strategy_name]['power'] = (
+                pd.read_csv(file_path)
+            )
+
+    # ------------------------------------------------------------------
+    # Carrega migration_counts.csv.
+    # ------------------------------------------------------------------
+
+    counts_file = (
+        results_path
+        / 'migration_counts.csv'
+    )
+
+    if counts_file.exists():
+
+        print('Loading migration counts...')
+
+        counts_df = load_migration_counts(
+            counts_file
+        )
+
+        if not counts_df.empty:
+
+            for _, row in counts_df.iterrows():
+
+                strategy_name = str(
+                    row['Strategy']
+                ).strip()
+
+                if not strategy_name:
+                    continue
+
+                # Uma estratégia pode existir apenas no migration_counts.csv.
+                strategies.setdefault(
+                    strategy_name,
+                    {}
+                )
+
+                started = int(
+                    row['StartedMigrations']
+                )
+
+                completed = int(
+                    row['CompletedMigrations']
+                )
+
+                successful = int(
+                    row['SuccessfulMigrations']
+                )
+
+                failed = int(
+                    row['FailedMigrations']
+                )
+
+                unfinished = int(
+                    row['UnfinishedMigrations']
+                )
+
+                consistent = (
+                    started
+                    == completed + unfinished
+                    and completed
+                    == successful + failed
+                )
+
+                if not consistent:
+                    print(
+                        'Warning: inconsistent migration counters '
+                        f"for strategy '{strategy_name}'."
+                    )
+
+                strategies[
+                    strategy_name
+                ]['migrations'] = {
+                    'started': started,
+                    'completed': completed,
+                    'successful': successful,
+                    'failed': failed,
+                    'unfinished': unfinished
+                }
+
     else:
-        print("Empty")
-    return data_files
+        print(
+            'Warning: migration_counts.csv not found.'
+        )
 
-# Resume potência/energia por estratégia. "active_hosts" aqui significa
-# CPUUtilization > 0 no CSV; não significa necessariamente Host fisicamente ligado.
-def analyze_power_consumption(power_data):
-    """Analyze power consumption data from different strategies"""
+    # ------------------------------------------------------------------
+    # Carrega simulation_counts.csv.
+    # ------------------------------------------------------------------
+
+    simulation_counts_file = (
+        results_path
+        / 'simulation_counts.csv'
+    )
+
+    if simulation_counts_file.exists():
+
+        print('Loading simulation cloudlet counts...')
+
+        simulation_counts_df = load_simulation_counts(
+            simulation_counts_file
+        )
+
+        if not simulation_counts_df.empty:
+
+            for _, row in simulation_counts_df.iterrows():
+
+                strategy_name = str(
+                    row['Strategy']
+                ).strip()
+
+                if not strategy_name:
+                    continue
+
+                # A estratégia também pode ser descoberta apenas por este CSV.
+                strategies.setdefault(
+                    strategy_name,
+                    {}
+                )
+
+                strategies[
+                    strategy_name
+                ]['cloudlets'] = {
+                    'submitted': int(
+                        row['SubmittedCloudlets']
+                    ),
+                    'finished': int(
+                        row['FinishedCloudlets']
+                    )
+                }
+
+    else:
+        print(
+            'Warning: simulation_counts.csv not found.'
+        )
+
+    if not strategies:
+        print(
+            'No migration strategies were discovered.'
+        )
+
+    return strategies
+
+
+# ---------------------------------------------------------------------------
+# CONSUMO DE ENERGIA
+# ---------------------------------------------------------------------------
+
+def analyze_power_consumption(df):
+    """
+    Analisa o CSV de consumo energético de uma estratégia.
+    """
+
+    if (
+        df is None
+        or df.empty
+        or 'PowerConsumption(W)' not in df.columns
+    ):
+        return None
+
+    total_row = df[
+        df['Host'] == 'Total'
+    ]
+
+    if total_row.empty:
+
+        active_hosts = df[
+            df['CPUUtilization'] > 0
+        ].shape[0]
+
+        total_power = df[
+            'PowerConsumption(W)'
+        ].sum()
+
+        average_power = df[
+            'PowerConsumption(W)'
+        ].mean()
+
+        maximum_power = df[
+            'PowerConsumption(W)'
+        ].max()
+
+        total_energy = df[
+            'TotalEnergyConsumption(Wh)'
+        ].sum()
+
+    else:
+
+        total_power = total_row[
+            'PowerConsumption(W)'
+        ].values[0]
+
+        total_energy = total_row[
+            'TotalEnergyConsumption(Wh)'
+        ].values[0]
+
+        hosts_df = df[
+            df['Host'] != 'Total'
+        ]
+
+        active_hosts = hosts_df[
+            hosts_df['CPUUtilization'] > 0
+        ].shape[0]
+
+        average_power = hosts_df[
+            'PowerConsumption(W)'
+        ].mean()
+
+        maximum_power = hosts_df[
+            'PowerConsumption(W)'
+        ].max()
+
+    return {
+        'total_power_consumption': total_power,
+        'average_power_consumption': average_power,
+        'max_power_consumption': maximum_power,
+        'active_hosts': active_hosts,
+        'total_energy_consumption': total_energy
+    }
+
+
+# ---------------------------------------------------------------------------
+# TEMPO DE EXECUÇÃO DAS CLOUDLETS
+# ---------------------------------------------------------------------------
+
+def analyze_execution_times(df):
+    """
+    Analisa tempos de execução das Cloudlets de uma estratégia.
+    """
+
+    if df is None or df.empty:
+        return None
+
+    exec_time_column = None
+
+    for column in df.columns:
+        if (
+            'Exec' in column
+            and 'Time' in column
+        ):
+            exec_time_column = column
+            break
+
+    if exec_time_column is None:
+        return None
+
+    execution_times = pd.to_numeric(
+        df[exec_time_column],
+        errors='coerce'
+    )
+
+    return {
+        'min_execution_time':
+            execution_times.min(),
+
+        'max_execution_time':
+            execution_times.max(),
+
+        'avg_execution_time':
+            execution_times.mean(),
+
+        'total_execution_time':
+            execution_times.sum(),
+
+        # O CSV contém apenas Cloudlets presentes na lista
+        # de finalizadas do broker.
+        'cloudlet_count':
+            len(df)
+    }
+
+
+# ---------------------------------------------------------------------------
+# DISTRIBUIÇÃO DAS VMs
+# ---------------------------------------------------------------------------
+
+def analyze_vm_distribution(df):
+    """
+    Calcula a distribuição de VMs/Cloudlets por Host.
+
+    Neste experimento existe uma Cloudlet por VM.
+    """
+
+    if (
+        df is None
+        or df.empty
+        or 'Host' not in df.columns
+    ):
+        return None
+
+    vm_per_host = (
+        df.groupby('Host')
+        .size()
+    )
+
+    if vm_per_host.empty:
+        return None
+
+    return {
+        'max_vms_per_host':
+            vm_per_host.max(),
+
+        'min_vms_per_host':
+            vm_per_host.min()
+    }
+
+
+# ---------------------------------------------------------------------------
+# VALIDAÇÃO DAS CLOUDLETS
+# ---------------------------------------------------------------------------
+
+def validate_cloudlets(cloudlet_counts, policy_df):
+    """
+    Valida a completude da execução de uma estratégia.
+
+    São comparados três valores independentes:
+
+    - Cloudlets submetidas ao Broker;
+    - Cloudlets finalizadas pelo Broker;
+    - linhas presentes no CSV de Cloudlets finalizadas.
+
+    Uma execução é considerada completa quando os três valores coincidem.
+    """
+
+    if cloudlet_counts is None:
+        return None
+
+    submitted = int(
+        cloudlet_counts['submitted']
+    )
+
+    finished = int(
+        cloudlet_counts['finished']
+    )
+
+    policy_count = (
+        len(policy_df)
+        if policy_df is not None
+        else None
+    )
+
+    broker_complete = (
+        submitted == finished
+    )
+
+    policy_csv_consistent = (
+        policy_count is not None
+        and finished == policy_count
+    )
+
+    complete = (
+        broker_complete
+        and policy_csv_consistent
+        and submitted == policy_count
+    )
+
+    missing = max(
+        submitted - finished,
+        0
+    )
+
+    return {
+        'submitted': submitted,
+        'finished': finished,
+        'policy_count': policy_count,
+        'missing': missing,
+        'broker_complete': broker_complete,
+        'policy_csv_consistent': policy_csv_consistent,
+        'complete': complete
+    }
+
+
+# ---------------------------------------------------------------------------
+# ANÁLISE CENTRALIZADA DAS ESTRATÉGIAS
+# ---------------------------------------------------------------------------
+
+def analyze_strategies(strategies):
+    """
+    Analisa automaticamente todas as estratégias descobertas.
+    """
+
     results = {}
 
-    for strategy, df in power_data.items():
-        if 'PowerConsumption(W)' in df.columns:
-            total_row = df[df['Host'] == 'Total']
+    for strategy_name, data in strategies.items():
 
-            if total_row.empty:
-                active_hosts = df[df['CPUUtilization'] > 0].shape[0]
-                total_power = df['PowerConsumption(W)'].sum()
-                avg_power = df['PowerConsumption(W)'].mean()
-                max_power = df['PowerConsumption(W)'].max()
-                total_energy = df['TotalEnergyConsumption(Wh)'].sum()
-            else:
-                total_power = total_row['PowerConsumption(W)'].values[0]
-                total_energy = total_row['TotalEnergyConsumption(Wh)'].values[0]
+        print(
+            f'\nAnalyzing strategy: {strategy_name}'
+        )
 
-                df_without_total = df[df['Host'] != 'Total']
-                active_hosts = df_without_total[df_without_total['CPUUtilization'] > 0].shape[0]
-                avg_power = df_without_total['PowerConsumption(W)'].mean()
-                max_power = df_without_total['PowerConsumption(W)'].max()
+        strategy_results = {}
 
-            results[strategy] = {
-                'total_power_consumption': total_power,
-                'average_power_consumption': avg_power,
-                'max_power_consumption': max_power,
-                'active_hosts': active_hosts,
-                'total_energy_consumption': total_energy
-            }
+        # --------------------------------------------------------------
+        # Energia
+        # --------------------------------------------------------------
+        power_df = data.get('power')
+
+        if power_df is not None:
+
+            power_results = (
+                analyze_power_consumption(
+                    power_df
+                )
+            )
+
+            if power_results:
+                strategy_results['power'] = (
+                    power_results
+                )
+
+        else:
+            print(
+                f"Warning: strategy '{strategy_name}' "
+                'has no power data.'
+            )
+
+        # --------------------------------------------------------------
+        # Cloudlets / execução
+        # --------------------------------------------------------------
+        policy_df = data.get('policy')
+
+        if policy_df is not None:
+
+            execution_results = (
+                analyze_execution_times(
+                    policy_df
+                )
+            )
+
+            if execution_results:
+                strategy_results[
+                    'execution'
+                ] = execution_results
+
+            distribution_results = (
+                analyze_vm_distribution(
+                    policy_df
+                )
+            )
+
+            if distribution_results:
+                strategy_results[
+                    'distribution'
+                ] = distribution_results
+
+        else:
+            print(
+                f"Warning: strategy '{strategy_name}' "
+                'has no policy data.'
+            )
+
+        # --------------------------------------------------------------
+        # Validação das Cloudlets
+        # --------------------------------------------------------------
+        cloudlet_counts = data.get(
+            'cloudlets'
+        )
+
+        validation_results = validate_cloudlets(
+            cloudlet_counts,
+            policy_df
+        )
+
+        if validation_results is not None:
+
+            strategy_results[
+                'cloudlet_validation'
+            ] = validation_results
+
+            if not validation_results['complete']:
+                print(
+                    f"Warning: incomplete or inconsistent Cloudlet result "
+                    f"for strategy '{strategy_name}'. "
+                    f"Submitted={validation_results['submitted']}, "
+                    f"Finished={validation_results['finished']}, "
+                    f"PolicyCSV={validation_results['policy_count']}."
+                )
+
+        else:
+            print(
+                f"Warning: strategy '{strategy_name}' "
+                'has no Cloudlet submission/finalization counts.'
+            )
+
+        # --------------------------------------------------------------
+        # Migrações
+        # --------------------------------------------------------------
+        migration_results = data.get(
+            'migrations'
+        )
+
+        if migration_results is not None:
+
+            strategy_results[
+                'migrations'
+            ] = migration_results
+
+        else:
+            print(
+                f"Warning: strategy '{strategy_name}' "
+                'has no migration count data.'
+            )
+
+        results[
+            strategy_name
+        ] = strategy_results
 
     return results
 
-# Gera o gráfico que efetivamente compara energia total entre estratégias.
-def plot_power_comparison(power_data):
-    """Create comparative plots for power consumption across strategies"""
-    power_dfs = {k: v for k, v in power_data.items() if 'power' in k}
 
-    if not power_dfs:
-        print("No power data found to plot")
+# ---------------------------------------------------------------------------
+# GRÁFICOS
+# ---------------------------------------------------------------------------
+
+def plot_total_energy_comparison(results):
+
+    strategies = []
+    values = []
+
+    for strategy, data in results.items():
+
+        power = data.get('power')
+
+        if power is None:
+            continue
+
+        strategies.append(strategy)
+
+        values.append(
+            power[
+                'total_energy_consumption'
+            ]
+        )
+
+    if not strategies:
+        print(
+            'No energy data available for plotting.'
+        )
         return
 
-    os.makedirs('plots', exist_ok=True)
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-    plt.figure(figsize=(10, 6))
-    results = analyze_power_consumption(power_dfs)
+    plt.figure(
+        figsize=(10, 6)
+    )
 
-    strategies = [s.replace('_power', '') for s in results.keys()]
-    total_energy = [results[s]['total_energy_consumption'] for s in results.keys()]
+    plt.bar(
+        strategies,
+        values
+    )
 
-    plt.bar(strategies, total_energy)
-    plt.title('Total Energy Consumption by Migration Strategy')
-    plt.xlabel('Migration Strategy')
-    plt.ylabel('Total Energy Consumption (Wh)')
+    plt.title(
+        'Total Energy Consumption by Migration Strategy'
+    )
+
+    plt.xlabel(
+        'Migration Strategy'
+    )
+
+    plt.ylabel(
+        'Total Energy Consumption (Wh)'
+    )
+
     plt.tight_layout()
-    plt.savefig('plots/total_energy_comparison.png')
 
-    print(f"Total energy comparison plot saved to the 'plots' directory")
+    plt.savefig(
+        PLOTS_DIR
+        / 'total_energy_comparison.png'
+    )
 
-    return results
+    plt.close()
 
-# Função auxiliar de distribuição. Observação semântica: df.shape[0] conta
-# linhas de Cloudlets; neste cenário coincide com VMs porque há 1 Cloudlet/VM.
-def analyze_migration_policies(policy_data):
-    """Analyze migration policy data"""
-    results = {}
 
-    for strategy, df in policy_data.items():
-        if 'policy' in strategy:
-            total_vms = df.shape[0]
-            avg_exec_time = df['ExecTime'].mean() if 'ExecTime' in df.columns else 0
+def plot_max_execution_time_comparison(results):
 
-            if 'Host' in df.columns and 'VM' in df.columns:
-                vm_per_host = df.groupby('Host').size()
-                max_vms_per_host = vm_per_host.max()
-                min_vms_per_host = vm_per_host.min() if not vm_per_host.empty else 0
-            else:
-                max_vms_per_host = min_vms_per_host = 0
+    strategies = []
+    values = []
 
-            results[strategy] = {
-                'total_vms': total_vms,
-                'average_execution_time': avg_exec_time,
-                'max_vms_per_host': max_vms_per_host,
-                'min_vms_per_host': min_vms_per_host
-            }
+    for strategy, data in results.items():
 
-    return results
+        execution = data.get(
+            'execution'
+        )
 
-# Também conta linhas por Host. Com 1 Cloudlet/VM, equivale à distribuição de VMs.
-def plot_vm_distribution(policy_data):
-    """Plot VM distribution across hosts"""
-    os.makedirs('plots', exist_ok=True)
+        if execution is None:
+            continue
 
-    policy_dfs = {k: v for k, v in policy_data.items() if 'policy' in k}
+        strategies.append(
+            strategy
+        )
 
-    if not policy_dfs:
-        print("No policy data found to plot")
+        values.append(
+            execution[
+                'max_execution_time'
+            ]
+        )
+
+    if not strategies:
         return
 
-    for strategy, df in policy_dfs.items():
-        strategy_name = strategy.replace('_policy', '')
-        if 'Host' in df.columns:
-            plt.figure(figsize=(12, 6))
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-            vm_counts = df.groupby('Host').size().sort_values(ascending=False)
+    plt.figure(
+        figsize=(10, 6)
+    )
 
-            vm_counts.plot(kind='bar')
-            plt.title(f'VM Distribution Across Hosts ({strategy_name})')
-            plt.xlabel('Host ID')
-            plt.ylabel('Number of VMs')
-            plt.tight_layout()
-            plt.savefig(f'plots/vm_distribution_{strategy_name}.png')
+    plt.bar(
+        strategies,
+        values
+    )
 
-    print(f"VM distribution plots saved to the 'plots' directory")
+    plt.title(
+        'Maximum Execution Time by Migration Strategy'
+    )
 
-# Procura dinamicamente a coluna que contém "Exec" e "Time" para tolerar
-# pequenas mudanças no cabeçalho produzido pelo CloudletsTableBuilder.
-def analyze_execution_times(policy_data):
-    """Analyze execution times of cloudlets across different strategies"""
-    results = {}
+    plt.xlabel(
+        'Migration Strategy'
+    )
 
-    for strategy, df in policy_data.items():
-        if 'policy' in strategy:
-            strategy_name = strategy.replace('_policy', '')
+    plt.ylabel(
+        'Maximum Execution Time (seconds)'
+    )
 
-            # Check if we have the execution time column
-            # It might be named 'ExecTime' or have spaces like 'Exec Time'
-            exec_time_col = None
-            for col in df.columns:
-                if 'Exec' in col and 'Time' in col:
-                    exec_time_col = col
-                    break
-
-            if exec_time_col is None:
-                print(f"Warning: No execution time column found in {strategy}")
-                continue
-
-            # Convert to numeric, handling any non-numeric values
-            df[exec_time_col] = pd.to_numeric(df[exec_time_col], errors='coerce')
-
-            # Calculate execution time statistics
-            min_time = df[exec_time_col].min()
-            max_time = df[exec_time_col].max()
-            avg_time = df[exec_time_col].mean()
-            total_time = df[exec_time_col].sum()
-
-            results[strategy_name] = {
-                'min_execution_time': min_time,
-                'max_execution_time': max_time,
-                'avg_execution_time': avg_time,
-                'total_execution_time': total_time,
-                'cloudlet_count': len(df)
-            }
-
-    return results
-
-def plot_execution_time_comparison(policy_data):
-    """Create comparative plot for maximum execution time across strategies"""
-    policy_dfs = {k: v for k, v in policy_data.items() if 'policy' in k}
-
-    if not policy_dfs:
-        print("No policy data found to plot execution time comparison")
-        return
-
-    os.makedirs('plots', exist_ok=True)
-
-    # Get execution time statistics
-    exec_time_stats = analyze_execution_times(policy_data)
-
-    # Convert to DataFrame for easier plotting
-    stats_df = pd.DataFrame(exec_time_stats).T
-
-    # Create bar chart for max execution time
-    plt.figure(figsize=(10, 6))
-    strategies = list(stats_df.index)
-    max_times = [stats_df.loc[s, 'max_execution_time'] for s in strategies]
-
-    plt.bar(strategies, max_times)
-    plt.title('Maximum Execution Time by Migration Strategy')
-    plt.xlabel('Migration Strategy')
-    plt.ylabel('Maximum Execution Time (seconds)')
     plt.tight_layout()
-    plt.savefig('plots/max_execution_time_comparison.png')
 
-    print(f"Maximum execution time comparison plot saved to the 'plots' directory")
+    plt.savefig(
+        PLOTS_DIR
+        / 'max_execution_time_comparison.png'
+    )
 
-    return exec_time_stats
+    plt.close()
 
-def plot_total_execution_time_comparison(policy_data):
-    """Create comparative plot for total execution time across strategies"""
-    policy_dfs = {k: v for k, v in policy_data.items() if 'policy' in k}
 
-    if not policy_dfs:
-        print("No policy data found to plot total execution time comparison")
+def plot_total_execution_time_comparison(
+        results):
+
+    strategies = []
+    values = []
+
+    for strategy, data in results.items():
+
+        execution = data.get(
+            'execution'
+        )
+
+        if execution is None:
+            continue
+
+        strategies.append(
+            strategy
+        )
+
+        values.append(
+            execution[
+                'total_execution_time'
+            ]
+        )
+
+    if not strategies:
         return
 
-    os.makedirs('plots', exist_ok=True)
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-    # Get execution time statistics
-    exec_time_stats = analyze_execution_times(policy_data)
+    plt.figure(
+        figsize=(10, 6)
+    )
 
-    # Convert to DataFrame for easier plotting
-    stats_df = pd.DataFrame(exec_time_stats).T
+    plt.bar(
+        strategies,
+        values
+    )
 
-    # Create bar chart for total execution time
-    plt.figure(figsize=(10, 6))
-    strategies = list(stats_df.index)
-    total_times = [stats_df.loc[s, 'total_execution_time'] for s in strategies]
+    plt.title(
+        'Total Execution Time by Migration Strategy'
+    )
 
-    plt.bar(strategies, total_times)
-    plt.title('Total Execution Time by Migration Strategy')
-    plt.xlabel('Migration Strategy')
-    plt.ylabel('Total Execution Time (seconds)')
+    plt.xlabel(
+        'Migration Strategy'
+    )
+
+    plt.ylabel(
+        'Total Execution Time (seconds)'
+    )
+
     plt.tight_layout()
-    plt.savefig('plots/total_execution_time_comparison.png')
 
-    print(f"Total execution time comparison plot saved to the 'plots' directory")
+    plt.savefig(
+        PLOTS_DIR
+        / 'total_execution_time_comparison.png'
+    )
 
-    return exec_time_stats
+    plt.close()
 
-# Junta métricas de energia e execução em um único CSV comparativo.
-def generate_comparison_table(power_results, exec_time_results=None):
-    """Generate a comparison table for all strategies"""
+
+def plot_vm_distribution(strategies):
+
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    for strategy_name, data in strategies.items():
+
+        df = data.get('policy')
+
+        if (
+            df is None
+            or df.empty
+            or 'Host' not in df.columns
+        ):
+            continue
+
+        vm_counts = (
+            df.groupby('Host')
+            .size()
+            .sort_values(
+                ascending=False
+            )
+        )
+
+        plt.figure(
+            figsize=(12, 6)
+        )
+
+        vm_counts.plot(
+            kind='bar'
+        )
+
+        plt.title(
+            f'VM Distribution Across Hosts '
+            f'({strategy_name})'
+        )
+
+        plt.xlabel(
+            'Host ID'
+        )
+
+        plt.ylabel(
+            'Number of VMs'
+        )
+
+        plt.tight_layout()
+
+        plt.savefig(
+            PLOTS_DIR
+            / f'vm_distribution_{strategy_name}.png'
+        )
+
+        plt.close()
+
+
+# ---------------------------------------------------------------------------
+# TABELA COMPARATIVA FINAL
+# ---------------------------------------------------------------------------
+
+def generate_comparison_table(results):
+    """
+    Gera uma linha para cada estratégia descoberta.
+
+    Uma estratégia não precisa possuir obrigatoriamente todos os tipos
+    de resultado. Dados ausentes permanecem vazios no CSV.
+    """
+
     comparison_data = []
 
-    for strategy, results in power_results.items():
-        strategy_name = strategy.replace('_power', '')
+    for strategy_name, data in results.items():
 
-        # Start with power results
-        strategy_data = {
-            'Strategy': strategy_name,
-            'Total Power (W)': results['total_power_consumption'],
-            'Average Power (W)': results['average_power_consumption'],
-            'Total Energy (Wh)': results['total_energy_consumption'],
-            'Active Hosts': results['active_hosts']
+        row = {
+            'Strategy': strategy_name
         }
 
-        # Add execution time results if available
-        if exec_time_results and strategy_name in exec_time_results:
-            exec_results = exec_time_results[strategy_name]
-            strategy_data.update({
-                'Total Exec Time (s)': exec_results['total_execution_time'],
-                'Avg Exec Time (s)': exec_results['avg_execution_time'],
-                'Max Exec Time (s)': exec_results['max_execution_time'],
-                'Min Exec Time (s)': exec_results['min_execution_time'],
-                'Cloudlet Count': exec_results['cloudlet_count']
+        # --------------------------------------------------------------
+        # Energia
+        # --------------------------------------------------------------
+        power = data.get(
+            'power'
+        )
+
+        if power is not None:
+
+            row.update({
+                'Total Power (W)':
+                    power[
+                        'total_power_consumption'
+                    ],
+
+                'Average Power (W)':
+                    power[
+                        'average_power_consumption'
+                    ],
+
+                'Total Energy (Wh)':
+                    power[
+                        'total_energy_consumption'
+                    ],
+
+                'Active Hosts':
+                    power[
+                        'active_hosts'
+                    ]
             })
 
-        comparison_data.append(strategy_data)
+        # --------------------------------------------------------------
+        # Execução
+        # --------------------------------------------------------------
+        execution = data.get(
+            'execution'
+        )
 
-    comparison_df = pd.DataFrame(comparison_data)
-    comparison_df.to_csv('plots/complete_strategy_comparison.csv', index=False)
+        if execution is not None:
 
-    print("\nComplete Strategy Comparison:")
-    print(comparison_df.to_string(index=False))
+            row.update({
+                'Total Exec Time (s)':
+                    execution[
+                        'total_execution_time'
+                    ],
 
-# Pipeline: carregar -> separar power/policy -> gráficos -> tabela final.
+                'Avg Exec Time (s)':
+                    execution[
+                        'avg_execution_time'
+                    ],
+
+                'Max Exec Time (s)':
+                    execution[
+                        'max_execution_time'
+                    ],
+
+                'Min Exec Time (s)':
+                    execution[
+                        'min_execution_time'
+                    ],
+
+                'Cloudlet Count':
+                    execution[
+                        'cloudlet_count'
+                    ]
+            })
+
+        # --------------------------------------------------------------
+        # Validação das Cloudlets
+        # --------------------------------------------------------------
+        validation = data.get(
+            'cloudlet_validation'
+        )
+
+        if validation is not None:
+
+            row.update({
+                'Submitted Cloudlets':
+                    validation['submitted'],
+
+                'Finished Cloudlets':
+                    validation['finished'],
+
+                'Missing Cloudlets':
+                    validation['missing'],
+
+                'Simulation Complete':
+                    validation['complete']
+            })
+
+        # --------------------------------------------------------------
+        # Migrações
+        # --------------------------------------------------------------
+        migrations = data.get(
+            'migrations'
+        )
+
+        if migrations is not None:
+
+            row.update({
+                'Started Migrations':
+                    migrations[
+                        'started'
+                    ],
+
+                'Completed Migrations':
+                    migrations[
+                        'completed'
+                    ],
+
+                'Successful Migrations':
+                    migrations[
+                        'successful'
+                    ],
+
+                'Failed Migrations':
+                    migrations[
+                        'failed'
+                    ],
+
+                'Unfinished Migrations':
+                    migrations[
+                        'unfinished'
+                    ]
+            })
+
+        comparison_data.append(
+            row
+        )
+
+    comparison_df = pd.DataFrame(
+        comparison_data
+    )
+
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    output_file = (
+        PLOTS_DIR
+        / 'complete_strategy_comparison.csv'
+    )
+
+    comparison_df.to_csv(
+        output_file,
+        index=False
+    )
+
+    print(
+        '\nComplete Strategy Comparison:'
+    )
+
+    print(
+        comparison_df.to_string(
+            index=False
+        )
+    )
+
+    print(
+        f'\nComparison CSV saved to: '
+        f'{output_file}'
+    )
+
+
+# ---------------------------------------------------------------------------
+# IMPRESSÃO DOS RESULTADOS
+# ---------------------------------------------------------------------------
+
+def print_analysis_summary(results):
+
+    print(
+        '\n======================================'
+    )
+
+    print(
+        ' MIGRATION STRATEGY ANALYSIS'
+    )
+
+    print(
+        '======================================'
+    )
+
+    for strategy, data in results.items():
+
+        print(
+            f'\nStrategy: {strategy}'
+        )
+
+        print(
+            '--------------------------------------'
+        )
+
+        power = data.get(
+            'power'
+        )
+
+        if power:
+
+            print(
+                'Power:'
+            )
+
+            print(
+                '  Total Power: '
+                f"{power['total_power_consumption']:.2f} W"
+            )
+
+            print(
+                '  Average Power: '
+                f"{power['average_power_consumption']:.2f} W"
+            )
+
+            print(
+                '  Total Energy: '
+                f"{power['total_energy_consumption']:.2f} Wh"
+            )
+
+            print(
+                '  Active Hosts: '
+                f"{power['active_hosts']}"
+            )
+
+        execution = data.get(
+            'execution'
+        )
+
+        if execution:
+
+            print(
+                'Execution:'
+            )
+
+            print(
+                '  Cloudlet Count: '
+                f"{execution['cloudlet_count']}"
+            )
+
+            print(
+                '  Total Exec Time: '
+                f"{execution['total_execution_time']:.4f} s"
+            )
+
+            print(
+                '  Average Exec Time: '
+                f"{execution['avg_execution_time']:.4f} s"
+            )
+
+            print(
+                '  Maximum Exec Time: '
+                f"{execution['max_execution_time']:.4f} s"
+            )
+
+            print(
+                '  Minimum Exec Time: '
+                f"{execution['min_execution_time']:.4f} s"
+            )
+
+        validation = data.get(
+            'cloudlet_validation'
+        )
+
+        if validation:
+
+            print(
+                'Cloudlet validation:'
+            )
+
+            print(
+                '  Submitted: '
+                f"{validation['submitted']}"
+            )
+
+            print(
+                '  Finished: '
+                f"{validation['finished']}"
+            )
+
+            print(
+                '  Policy CSV rows: '
+                f"{validation['policy_count']}"
+            )
+
+            print(
+                '  Missing: '
+                f"{validation['missing']}"
+            )
+
+            print(
+                '  Complete: '
+                f"{validation['complete']}"
+            )
+
+        migrations = data.get(
+            'migrations'
+        )
+
+        if migrations:
+
+            print(
+                'Migrations:'
+            )
+
+            print(
+                '  Started: '
+                f"{migrations['started']}"
+            )
+
+            print(
+                '  Completed: '
+                f"{migrations['completed']}"
+            )
+
+            print(
+                '  Successful: '
+                f"{migrations['successful']}"
+            )
+
+            print(
+                '  Failed: '
+                f"{migrations['failed']}"
+            )
+
+            print(
+                '  Unfinished: '
+                f"{migrations['unfinished']}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------------
+
 def main():
-    print("Starting migration simulation analysis...")
 
-    data = load_data()
+    print(
+        'Starting migration simulation analysis...'
+    )
 
-    power_data = {k: v for k, v in data.items() if 'power' in k} # Saída vazio
-    policy_data = {k: v for k, v in data.items() if 'policy' in k}
+    # ------------------------------------------------------------------
+    # 1. Descobre automaticamente as estratégias.
+    # ------------------------------------------------------------------
 
-    os.makedirs('plots', exist_ok=True)
+    strategies = discover_strategies()
 
-    exec_time_results = None
-    power_results = None
+    if not strategies:
 
-    if power_data:
-        print("\nAnalyzing power consumption data...")
-        power_results = plot_power_comparison(power_data)
+        print(
+            'No strategies available for analysis.'
+        )
 
-        for strategy, results in power_results.items():
-            strategy_name = strategy.replace('_power', '')
-            print(f"\n{strategy_name} power statistics:")
-            for metric, value in results.items():
-                print(f"  {metric}: {value:.2f}")
-    else:
-        print("No power consumption data found")
+        return
 
-    if policy_data:
-        print("\nAnalyzing execution time data...")
-        exec_time_results = plot_execution_time_comparison(policy_data)
+    print(
+        '\nStrategies discovered:'
+    )
 
-        # Add total execution time plot
-        plot_total_execution_time_comparison(policy_data)
+    for strategy in strategies:
 
-        for strategy, results in exec_time_results.items():
-            print(f"\n{strategy} execution time statistics:")
-            for metric, value in results.items():
-                print(f"  {metric}: {value:.4f}")
-    else:
-        print("No migration policy data found")
+        available_data = ', '.join(
+            strategies[strategy].keys()
+        )
 
-    if power_data and policy_data:
-        print("\nGenerating comprehensive comparison table...")
-        generate_comparison_table(power_results, exec_time_results)
+        print(
+            f'  {strategy}: {available_data}'
+        )
 
-if __name__ == "__main__":
+    # ------------------------------------------------------------------
+    # 2. Analisa todas as estratégias.
+    # ------------------------------------------------------------------
+
+    results = analyze_strategies(
+        strategies
+    )
+
+    # ------------------------------------------------------------------
+    # 3. Mostra resumo.
+    # ------------------------------------------------------------------
+
+    print_analysis_summary(
+        results
+    )
+
+    # ------------------------------------------------------------------
+    # 4. Gera gráficos.
+    # ------------------------------------------------------------------
+
+    print(
+        '\nGenerating plots...'
+    )
+
+    plot_total_energy_comparison(
+        results
+    )
+
+    plot_max_execution_time_comparison(
+        results
+    )
+
+    plot_total_execution_time_comparison(
+        results
+    )
+
+    plot_vm_distribution(
+        strategies
+    )
+
+    # ------------------------------------------------------------------
+    # 5. Gera CSV comparativo final.
+    # ------------------------------------------------------------------
+
+    print(
+        '\nGenerating comprehensive comparison table...'
+    )
+
+    generate_comparison_table(
+        results
+    )
+
+    print(
+        '\nAnalysis completed.'
+    )
+
+
+if __name__ == '__main__':
     main()
