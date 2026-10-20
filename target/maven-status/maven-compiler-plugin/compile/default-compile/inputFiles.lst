@@ -1,4 +1,9 @@
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationFirstFitPolicy.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/SimulationCsvWriter.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationRandomFitPolicy.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/VmAllocationPolicyMigrationRandomFit.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationTracker.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationBestFitPolicy.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/Shared.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationCsvWriter.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/FixedVmSchedulerTimeShared.java

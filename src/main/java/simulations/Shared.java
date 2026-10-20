@@ -753,7 +753,7 @@ public class Shared {
     }
 
     public static void startMigration(
-            final int[] migrationsNumber,
+            final int migrationsStarted,
             final CloudSimPlus simulation,
             final VmHostEventInfo info) {
 
@@ -784,9 +784,7 @@ public class Shared {
 
         System.out.println();
 
-        migrationsNumber[0]++;
-
-        if (migrationsNumber[0] > 1) {
+        if (migrationsStarted > 1) {
             return;
         }
 

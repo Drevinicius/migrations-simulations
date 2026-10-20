@@ -1,0 +1,17 @@
+# Maven
+/target/
+
+# Resultados das simulações
+/migrations_results/
+
+# Resultados da análise Python
+/analysis/plots/
+
+# Ambiente virtual Python
+/analysis/venv/
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+*.csv

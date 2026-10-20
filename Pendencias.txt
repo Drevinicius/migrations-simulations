@@ -1,1 +1,7 @@
-É tentar reproduzir os dados do artigo no linux 
+É tentar reproduzir os dados do artigo no linux
+
+ Buscar outras politicas de migração (Buscar incrementar)
+
+- Três-Vias (Three-Way Decision – VMM-3WD)
+- Ballooning + Live Migration (LMEB)
+- Metaheurísticas (GA, ACO, Epsilon-Greedy)

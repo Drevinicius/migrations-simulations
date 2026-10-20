@@ -53,12 +53,14 @@ public final class MigrationRandomFitPolicy {
     private final List<Vm> vmList = new ArrayList<>();
     private final DatacenterBrokerSimple broker;
 
+    private final MigrationTracker migrationTracker = new MigrationTracker();
+
     private final CloudSimPlus simulation;
     private VmAllocationPolicyMigrationRandomFit allocationPolicy;
     private List<Host> hostList;
 
     // Array de 1 posição é usado como um "inteiro mutável" para Shared.startMigration().
-    private final int[] migrationsNumber = {0};
+    //private final int[] migrationsNumber = {0};
 
     public static void main(String[] args) {
         new MigrationRandomFitPolicy();
@@ -122,7 +124,8 @@ public final class MigrationRandomFitPolicy {
             "%nHosts CPU usage History (when the allocated MIPS is lower than the requested, it is due to VM migration overhead)%n");
 
         hostList.stream().filter(h -> h.getId() <= 2).forEach(Shared::printHostStateHistory);
-        System.out.printf("Number of VM migrations: %d%n", migrationsNumber[0]);
+        //System.out.printf("Number of VM migrations: %d%n", migrationsNumber[0]);
+        System.out.printf("Number of VM migrations: %d%n", migrationTracker.getStarted());
 
         Shared.printPowerConsumptionSummary(hostList, simulation);
 
@@ -130,7 +133,7 @@ public final class MigrationRandomFitPolicy {
     }
 
     private void startMigration(final VmHostEventInfo info) {
-        Shared.startMigration(migrationsNumber, simulation, info);
+        Shared.startMigration(migrationTracker.getStarted(), simulation, info);
     }
 
     private void finishMigration(final VmHostEventInfo info) {
@@ -230,7 +233,7 @@ public final class MigrationRandomFitPolicy {
         for (int i = 0; i < Config.Host.PES.length; i++) {
             final int pes = Config.Host.PES[i];
             final long ram = Config.Host.RAM[i];
-            list.add(Shared.createHostWithFixedScheduler(pes, ram));
+            list.add(Shared.createHost(pes, ram));
         }
 
         return list;

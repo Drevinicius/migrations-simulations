@@ -42,7 +42,7 @@ public final class MigrationFirstFitPolicy {
 
 	private List<Host> hostList;
 
-	private final int[] migrationsNumber = { 0 };
+	private final MigrationTracker migrationTracker = new MigrationTracker();
 
 	public static void main(
 			final String[] args) {
@@ -68,8 +68,9 @@ public final class MigrationFirstFitPolicy {
 
 		simulation = new CloudSimPlus();
 
-		@SuppressWarnings("unused")
 		final Datacenter datacenter0 = createDatacenter();
+		datacenter0.addOnVmMigrationFinishListener(
+				migrationTracker::recordResult);
 
 		broker = new DatacenterBrokerSimple(
 				simulation);
@@ -156,9 +157,23 @@ public final class MigrationFirstFitPolicy {
 				.forEach(
 						Shared::printHostStateHistory);
 
-		System.out.printf(
-				"Number of VM migrations: %d%n",
-				migrationsNumber[0]);
+		migrationTracker.printSummary();
+
+		try {
+			MigrationCsvWriter.writeOrUpdate("first_fit", migrationTracker);
+		} catch (final IOException e) {
+			System.err.println(
+					"Error writing migration counts CSV: "
+							+ e.getMessage());
+		}
+
+		try {
+			SimulationCsvWriter.writeOrUpdate("first_fit", broker);
+		} catch (final IOException e) {
+			System.err.println(
+					"Error writing simulation counts CSV: "
+							+ e.getMessage());
+		}
 
 		Shared.printPowerConsumptionSummary(
 				hostList,
@@ -173,8 +188,10 @@ public final class MigrationFirstFitPolicy {
 	private void startMigration(
 			final VmHostEventInfo info) {
 
+		migrationTracker.recordStart(info);
+
 		Shared.startMigration(
-				migrationsNumber,
+				migrationTracker.getStarted(),
 				simulation,
 				info);
 	}
