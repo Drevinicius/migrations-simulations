@@ -400,7 +400,7 @@ public final class MigrationWorstFitPolicy {
             final long ram = Config.Host.RAM[i];
 
             list.add(
-                    Shared.createHostWithFixedScheduler(
+                    Shared.createHost(
                             pes,
                             ram));
         }
@@ -458,8 +458,6 @@ public final class MigrationWorstFitPolicy {
                 broker
                         .getVmCreatedList()
                         .size());
-
-        printInitialVmDistribution();
 
         simulation.addOnClockTickListener(
                 clock -> {

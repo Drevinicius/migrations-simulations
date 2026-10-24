@@ -39,7 +39,7 @@ import static java.util.Comparator.comparingLong;
  * 6) inicia a simulação;
  * 7) a política detecta Hosts >80% ou <10% e propõe migrações;
  * 8) ao terminar, gera CSV de Cloudlets, energia, migrações
- *    e contagem de Cloudlets.
+ * e contagem de Cloudlets.
  *
  * RANDOM FIT:
  * Entre os Hosts candidatos válidos (que comportam a VM), escolhe
@@ -55,8 +55,7 @@ public final class MigrationRandomFitPolicy {
 
     // Rastreia migrações iniciadas, concluídas, bem-sucedidas,
     // falhas e não finalizadas.
-    private final MigrationTracker migrationTracker =
-        new MigrationTracker();
+    private final MigrationTracker migrationTracker = new MigrationTracker();
 
     private final CloudSimPlus simulation;
 
@@ -77,13 +76,11 @@ public final class MigrationRandomFitPolicy {
 
         if (Config.Host.PES.length != Config.Host.RAM.length) {
             throw new IllegalStateException(
-                "The length of arrays Config.Host.PES and Config.Host.RAM must match."
-            );
+                    "The length of arrays Config.Host.PES and Config.Host.RAM must match.");
         }
 
         System.out.println(
-            "Starting " + getClass().getSimpleName()
-        );
+                "Starting " + getClass().getSimpleName());
 
         // Motor de eventos discretos:
         // o clock representa tempo simulado.
@@ -99,8 +96,7 @@ public final class MigrationRandomFitPolicy {
          * migração iniciada terminou com sucesso ou falha.
          */
         datacenter0.addOnVmMigrationFinishListener(
-            migrationTracker::recordResult
-        );
+                migrationTracker::recordResult);
 
         // Broker responsável por submeter VMs e Cloudlets.
         broker = new DatacenterBrokerSimple(simulation);
@@ -109,26 +105,19 @@ public final class MigrationRandomFitPolicy {
         createAndSubmitCloudlets(broker);
 
         broker.addOnVmsCreatedListener(
-            this::onVmsCreatedListener
-        );
+                this::onVmsCreatedListener);
 
         // Executa a simulação até não existirem mais eventos.
         simulation.start();
 
-        final List<Cloudlet> finishedList =
-            broker.getCloudletFinishedList();
+        final List<Cloudlet> finishedList = broker.getCloudletFinishedList();
 
-        final Comparator<Cloudlet> cloudletComparator =
-            comparingLong(
-                (Cloudlet c) ->
-                    c.getVm().getHost().getId()
-            )
-            .thenComparingLong(
-                c -> c.getVm().getId()
-            )
-            .thenComparingLong(
-                Cloudlet::getId
-            );
+        final Comparator<Cloudlet> cloudletComparator = comparingLong(
+                (Cloudlet c) -> c.getVm().getHost().getId())
+                .thenComparingLong(
+                        c -> c.getVm().getId())
+                .thenComparingLong(
+                        Cloudlet::getId);
 
         finishedList.sort(cloudletComparator);
 
@@ -139,8 +128,7 @@ public final class MigrationRandomFitPolicy {
          * migration_random_fit_power.csv
          */
         try {
-            final java.io.File resultsDir =
-                new java.io.File("migrations_results");
+            final java.io.File resultsDir = new java.io.File("migrations_results");
 
             if (!resultsDir.exists()) {
                 resultsDir.mkdirs();
@@ -149,62 +137,49 @@ public final class MigrationRandomFitPolicy {
             final CsvTable csv = new CsvTable();
 
             csv.setPrintStream(
-                new PrintStream(
-                    new java.io.File(
-                        "migrations_results/"
-                        + "migration_random_fit_policy.csv"
-                    )
-                )
-            );
+                    new PrintStream(
+                            new java.io.File(
+                                    "migrations_results/"
+                                            + "migration_random_fit_policy.csv")));
 
             new CloudletsTableBuilder(
-                finishedList,
-                csv
-            ).build();
+                    finishedList,
+                    csv).build();
 
-            final CsvTable powerCsv =
-                new CsvTable();
+            final CsvTable powerCsv = new CsvTable();
 
             powerCsv.setPrintStream(
-                new PrintStream(
-                    new java.io.File(
-                        "migrations_results/"
-                        + "migration_random_fit_power.csv"
-                    )
-                )
-            );
+                    new PrintStream(
+                            new java.io.File(
+                                    "migrations_results/"
+                                            + "migration_random_fit_power.csv")));
 
             Shared.exportPowerConsumptionToCsv(
-                hostList,
-                simulation,
-                powerCsv,
-                "Random Fit"
-            );
+                    hostList,
+                    simulation,
+                    powerCsv,
+                    "Random Fit");
 
             // Também exibe a tabela no terminal.
             new CloudletsTableBuilder(
-                finishedList
-            ).build();
+                    finishedList).build();
 
         } catch (final IOException e) {
             System.err.println(
-                "Error writing CSV files: "
-                + e.getMessage()
-            );
+                    "Error writing CSV files: "
+                            + e.getMessage());
         }
 
         System.out.printf(
-            "%nHosts CPU usage History "
-            + "(when the allocated MIPS is lower than "
-            + "the requested, it is due to VM migration "
-            + "overhead)%n"
-        );
+                "%nHosts CPU usage History "
+                        + "(when the allocated MIPS is lower than "
+                        + "the requested, it is due to VM migration "
+                        + "overhead)%n");
 
         hostList.stream()
-            .filter(host -> host.getId() <= 2)
-            .forEach(
-                Shared::printHostStateHistory
-            );
+                .filter(host -> host.getId() <= 2)
+                .forEach(
+                        Shared::printHostStateHistory);
 
         /*
          * Mostra:
@@ -222,14 +197,12 @@ public final class MigrationRandomFitPolicy {
          */
         try {
             MigrationCsvWriter.writeOrUpdate(
-                "random_fit",
-                migrationTracker
-            );
+                    "random_fit",
+                    migrationTracker);
         } catch (final IOException e) {
             System.err.println(
-                "Error writing migration counts CSV: "
-                + e.getMessage()
-            );
+                    "Error writing migration counts CSV: "
+                            + e.getMessage());
         }
 
         /*
@@ -240,25 +213,21 @@ public final class MigrationRandomFitPolicy {
          */
         try {
             SimulationCsvWriter.writeOrUpdate(
-                "random_fit",
-                broker
-            );
+                    "random_fit",
+                    broker);
         } catch (final IOException e) {
             System.err.println(
-                "Error writing simulation counts CSV: "
-                + e.getMessage()
-            );
+                    "Error writing simulation counts CSV: "
+                            + e.getMessage());
         }
 
         Shared.printPowerConsumptionSummary(
-            hostList,
-            simulation
-        );
+                hostList,
+                simulation);
 
         System.out.println(
-            getClass().getSimpleName()
-            + " finished!"
-        );
+                getClass().getSimpleName()
+                        + " finished!");
     }
 
     /**
@@ -270,10 +239,9 @@ public final class MigrationRandomFitPolicy {
         migrationTracker.recordStart(info);
 
         Shared.startMigration(
-            migrationTracker.getStarted(),
-            simulation,
-            info
-        );
+                migrationTracker.getStarted(),
+                simulation,
+                info);
     }
 
     /**
@@ -284,9 +252,8 @@ public final class MigrationRandomFitPolicy {
             final VmHostEventInfo info) {
 
         Shared.finishMigration(
-            hostList,
-            info
-        );
+                hostList,
+                info);
     }
 
     /**
@@ -298,48 +265,37 @@ public final class MigrationRandomFitPolicy {
     public void createAndSubmitCloudlets(
             final DatacenterBroker broker) {
 
-        final List<Cloudlet> list =
-            new ArrayList<>(
-                Config.VM.PES.length
-            );
+        final List<Cloudlet> list = new ArrayList<>(
+                Config.VM.PES.length);
 
-        final UtilizationModelDynamic um =
-            Shared.createCpuUtilizationModel(
+        final UtilizationModelDynamic um = Shared.createCpuUtilizationModel(
                 Config.Cloudlet.INITIAL_CPU_PERCENTAGE,
-                1
-            );
+                1);
 
         for (final Vm vm : vmList) {
             list.add(
-                Shared.createCloudlet(
-                    vm,
-                    broker,
-                    um
-                )
-            );
+                    Shared.createCloudlet(
+                            vm,
+                            broker,
+                            um));
         }
 
         if (!list.isEmpty()) {
             list.get(
-                list.size() - 1
-            ).setUtilizationModelCpu(
-                Shared.createCpuUtilizationModel(
-                    Config.Cloudlet
-                        .INITIAL_CPU_PERCENTAGE,
-                    1
-                )
-            );
+                    list.size() - 1).setUtilizationModelCpu(
+                            Shared.createCpuUtilizationModel(
+                                    Config.Cloudlet.INITIAL_CPU_PERCENTAGE,
+                                    1));
         }
 
         broker.submitCloudletList(list);
 
         System.out.println(
-            "Created "
-            + list.size()
-            + " cloudlets "
-            + "(including high-utilization ones "
-            + "to trigger migrations)"
-        );
+                "Created "
+                        + list.size()
+                        + " cloudlets "
+                        + "(including high-utilization ones "
+                        + "to trigger migrations)");
     }
 
     /**
@@ -349,15 +305,12 @@ public final class MigrationRandomFitPolicy {
     public void createAndSubmitVms(
             final DatacenterBroker broker) {
 
-        final List<Vm> list =
-            new ArrayList<>(
-                Config.VM.PES.length
-            );
+        final List<Vm> list = new ArrayList<>(
+                Config.VM.PES.length);
 
         for (final int pes : Config.VM.PES) {
             list.add(
-                Shared.createVm(pes)
-            );
+                    Shared.createVm(pes));
         }
 
         vmList.addAll(list);
@@ -370,11 +323,8 @@ public final class MigrationRandomFitPolicy {
          * MigrationTracker.recordStart()
          */
         list.forEach(
-            vm ->
-                vm.addOnMigrationStartListener(
-                    this::startMigration
-                )
-        );
+                vm -> vm.addOnMigrationStartListener(
+                        this::startMigration));
 
         /*
          * Listener já existente no projeto
@@ -384,26 +334,22 @@ public final class MigrationRandomFitPolicy {
          * é feita pelo listener do Datacenter.
          */
         list.forEach(
-            vm ->
-                vm.addOnMigrationFinishListener(
-                    this::finishMigration
-                )
-        );
+                vm -> vm.addOnMigrationFinishListener(
+                        this::finishMigration));
 
         list.forEach(
-            Vm::enableUtilizationStats
-        );
+                Vm::enableUtilizationStats);
     }
 
     /**
      * Cria os Hosts e instala a política Random Fit.
      *
      * - VmSelectionPolicyMinimumUtilization:
-     *   decide qual VM será retirada de um Host
-     *   sobrecarregado.
+     * decide qual VM será retirada de um Host
+     * sobrecarregado.
      *
      * - VmAllocationPolicyMigrationRandomFit:
-     *   escolhe aleatoriamente um destino válido.
+     * escolhe aleatoriamente um destino válido.
      */
     private Datacenter createDatacenter() {
 
@@ -417,35 +363,27 @@ public final class MigrationRandomFitPolicy {
          * entre os Hosts válidos, escolhe
          * aleatoriamente o destino da VM.
          */
-        this.allocationPolicy =
-            new VmAllocationPolicyMigrationRandomFit(
+        this.allocationPolicy = new VmAllocationPolicyMigrationRandomFit(
                 new VmSelectionPolicyMinimumUtilization(),
-                Config.Host
-                    .OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION
-            );
+                Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
 
         this.allocationPolicy
-            .setUnderUtilizationThreshold(
-                Config.Host
-                    .UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION
-            );
+                .setUnderUtilizationThreshold(
+                        Config.Host.UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
 
-        final Datacenter dc =
-            new DatacenterSimple(
+        final Datacenter dc = new DatacenterSimple(
                 simulation,
                 hostList,
-                allocationPolicy
-            );
+                allocationPolicy);
 
         for (final Host host : hostList) {
             System.out.printf(
-                "# Created %s with %.0f MIPS "
-                + "x %d PEs (%.0f total MIPS)%n",
-                host,
-                host.getMips(),
-                host.getPesNumber(),
-                host.getTotalMipsCapacity()
-            );
+                    "# Created %s with %.0f MIPS "
+                            + "x %d PEs (%.0f total MIPS)%n",
+                    host,
+                    host.getMips(),
+                    host.getPesNumber(),
+                    host.getTotalMipsCapacity());
         }
 
         /*
@@ -453,11 +391,9 @@ public final class MigrationRandomFitPolicy {
          * 1 segundo de tempo simulado.
          */
         dc.setSchedulingInterval(
-            Config.Scheduling.INTERVAL
-        )
-        .setHostSearchRetryDelay(
-            Config.Host.SEARCH_RETRY_DELAY
-        );
+                Config.Scheduling.INTERVAL)
+                .setHostSearchRetryDelay(
+                        Config.Host.SEARCH_RETRY_DELAY);
 
         return dc;
     }
@@ -470,32 +406,57 @@ public final class MigrationRandomFitPolicy {
      */
     private List<Host> createHosts() {
 
-        final List<Host> list =
-            new ArrayList<>(
-                Config.Host.PES.length
-            );
+        final List<Host> list = new ArrayList<>(
+                Config.Host.PES.length);
 
-        for (
-            int i = 0;
-            i < Config.Host.PES.length;
-            i++
-        ) {
+        for (int i = 0; i < Config.Host.PES.length; i++) {
 
-            final int pes =
-                Config.Host.PES[i];
+            final int pes = Config.Host.PES[i];
 
-            final long ram =
-                Config.Host.RAM[i];
+            final long ram = Config.Host.RAM[i];
 
             list.add(
-                Shared.createHost(
-                    pes,
-                    ram
-                )
-            );
+                    Shared.createHost(
+                            pes,
+                            ram));
         }
 
         return list;
+    }
+
+    private void printInitialVmDistribution() {
+
+        System.out.println();
+        System.out.println("===== INITIAL VM DISTRIBUTION =====");
+
+        long hostsWithVms = hostList.stream()
+                .filter(host -> !host.getVmList().isEmpty())
+                .count();
+
+        System.out.printf(
+                "Hosts with VMs: %d%n",
+                hostsWithVms);
+
+        hostList.stream()
+                .filter(host -> !host.getVmList().isEmpty())
+                .sorted(
+                        Comparator.comparingLong(
+                                Host::getId))
+                .forEach(host -> {
+
+                    System.out.printf(
+                            "Host %d -> VMs: %d | "
+                                    + "Total MIPS: %.0f | "
+                                    + "Allocated MIPS: %.0f | "
+                                    + "Available MIPS: %.0f%n",
+                            host.getId(),
+                            host.getVmList().size(),
+                            host.getTotalMipsCapacity(),
+                            host.getTotalAllocatedMips(),
+                            host.getTotalAvailableMips());
+                });
+
+        System.out.println("===================================");
     }
 
     /**
@@ -510,80 +471,58 @@ public final class MigrationRandomFitPolicy {
             final DatacenterBrokerEventInfo info) {
 
         System.out.printf(
-            "# All %d VMs submitted to the broker "
-            + "have been created.%n",
-            broker
-                .getVmCreatedList()
-                .size()
-        );
+                "# All %d VMs submitted to the broker "
+                        + "have been created.%n",
+                broker
+                        .getVmCreatedList()
+                        .size());
 
         simulation.addOnClockTickListener(
-            clock -> {
+                clock -> {
 
-                if (
-                    clock.getTime() > 0
-                    && clock.getTime() <= 2
-                ) {
+                    if (clock.getTime() > 0
+                            && clock.getTime() <= 2) {
 
-                    System.out.printf(
-                        "%.2f: Checking hosts for "
-                        + "potential VM migrations...%n",
-                        clock.getTime()
-                    );
+                        System.out.printf(
+                                "%.2f: Checking hosts for "
+                                        + "potential VM migrations...%n",
+                                clock.getTime());
 
-                    for (
-                        final Host host :
-                        hostList
-                    ) {
+                        for (final Host host : hostList) {
 
-                        final double cpuUtilization =
-                            host.getCpuPercentUtilization();
+                            final double cpuUtilization = host.getCpuPercentUtilization();
 
-                        if (
-                            cpuUtilization
-                            > Config.Host
-                                .OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION
-                        ) {
+                            if (cpuUtilization > Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION) {
 
-                            System.out.printf(
-                                "%.2f: Host %d is overloaded "
-                                + "with %.1f%% CPU utilization "
-                                + "(threshold: %.1f%%)%n",
-                                clock.getTime(),
-                                host.getId(),
-                                cpuUtilization * 100,
-                                Config.Host
-                                    .OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION
-                                    * 100
-                            );
+                                System.out.printf(
+                                        "%.2f: Host %d is overloaded "
+                                                + "with %.1f%% CPU utilization "
+                                                + "(threshold: %.1f%%)%n",
+                                        clock.getTime(),
+                                        host.getId(),
+                                        cpuUtilization * 100,
+                                        Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION
+                                                * 100);
+                            }
                         }
                     }
-                }
-            }
-        );
+                });
 
         broker.removeOnVmsCreatedListener(
-            info.getListener()
-        );
+                info.getListener());
 
         vmList.forEach(
-            vm ->
-                Shared.showVmAllocatedMips(
-                    vm,
-                    vm.getHost(),
-                    info.getTime()
-                )
-        );
+                vm -> Shared.showVmAllocatedMips(
+                        vm,
+                        vm.getHost(),
+                        info.getTime()));
 
         System.out.println();
 
         hostList.forEach(
-            host ->
-                Shared.showHostAllocatedMips(
-                    info.getTime(),
-                    host
-                )
-        );
+                host -> Shared.showHostAllocatedMips(
+                        info.getTime(),
+                        host));
 
         System.out.println();
     }
