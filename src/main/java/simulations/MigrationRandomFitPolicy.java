@@ -1,7 +1,12 @@
 package simulations;
 
-import ch.qos.logback.classic.Level;
-import simulations.Shared.Config;
+import static java.util.Comparator.comparingLong;
+
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
@@ -14,18 +19,13 @@ import org.cloudsimplus.datacenters.DatacenterSimple;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.listeners.DatacenterBrokerEventInfo;
 import org.cloudsimplus.listeners.VmHostEventInfo;
-import org.cloudsimplus.selectionpolicies.VmSelectionPolicyMinimumUtilization;
+import org.cloudsimplus.selectionpolicies.VmSelectionPolicyMinimumMigrationTime;
 import org.cloudsimplus.util.Log;
 import org.cloudsimplus.utilizationmodels.UtilizationModelDynamic;
 import org.cloudsimplus.vms.Vm;
 
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-
-import static java.util.Comparator.comparingLong;
+import ch.qos.logback.classic.Level;
+import simulations.Shared.Config;
 
 
 /**
@@ -59,9 +59,6 @@ public final class MigrationRandomFitPolicy {
     private VmAllocationPolicyMigrationRandomFit allocationPolicy;
     private List<Host> hostList;
 
-    // Array de 1 posição é usado como um "inteiro mutável" para Shared.startMigration().
-    //private final int[] migrationsNumber = {0};
-
     public static void main(String[] args) {
         new MigrationRandomFitPolicy();
     }
@@ -92,6 +89,20 @@ public final class MigrationRandomFitPolicy {
         broker.addOnVmsCreatedListener(this::onVmsCreatedListener);
 
         // A partir daqui o CloudSim Plus processa os eventos até não haver mais trabalho.
+
+        // Antes de simulation.start();
+        simulation.addOnClockTickListener(clock -> {
+            // Se houver migrações não finalizadas, mantém a simulação viva
+            if (migrationTracker.getUnfinished() > 0) {
+                // Adiciona um pequeno atraso para o próximo evento, forçando o simulador a continuar
+                // O valor 0.1 é um "chute" seguro; se for muito baixo, pode não dar tempo.
+                // Você pode ajustar esse valor se necessário.
+                simulation.pause(0.1); 
+            }
+        });
+
+        simulation.terminateAt(1000); 
+
         simulation.start();
 
         final List<Cloudlet> finishedList = broker.getCloudletFinishedList();
@@ -101,6 +112,22 @@ public final class MigrationRandomFitPolicy {
                 .thenComparingLong(Cloudlet::getId);
         finishedList.sort(cloudletComparator);
 
+        // ------------------------------------------------------------
+        // Escrita dos CSVs agregados desta política.
+        // (Antes essa parte estava por engano dentro de createDatacenter(),
+        //  onde broker ainda era null.)
+        // ------------------------------------------------------------
+        try {
+            SimulationCsvWriter.writeOrUpdate("Random Fit", broker);
+            MigrationCsvWriter.writeOrUpdate("Random Fit", migrationTracker);
+            
+        } catch (final IOException e) {
+            System.err.println("Error writing summary CSV files: " + e.getMessage());
+        }
+
+        // ------------------------------------------------------------
+        // CSVs individuais desta política.
+        // ------------------------------------------------------------
         try {
             java.io.File resultsDir = new java.io.File("migrations_results");
             if (!resultsDir.exists()) {
@@ -124,7 +151,6 @@ public final class MigrationRandomFitPolicy {
             "%nHosts CPU usage History (when the allocated MIPS is lower than the requested, it is due to VM migration overhead)%n");
 
         hostList.stream().filter(h -> h.getId() <= 2).forEach(Shared::printHostStateHistory);
-        //System.out.printf("Number of VM migrations: %d%n", migrationsNumber[0]);
         System.out.printf("Number of VM migrations: %d%n", migrationTracker.getStarted());
 
         Shared.printPowerConsumptionSummary(hostList, simulation);
@@ -133,6 +159,9 @@ public final class MigrationRandomFitPolicy {
     }
 
     private void startMigration(final VmHostEventInfo info) {
+
+        migrationTracker.recordStart(info);
+
         Shared.startMigration(migrationTracker.getStarted(), simulation, info);
     }
 
@@ -156,7 +185,10 @@ public final class MigrationRandomFitPolicy {
         }
 
         if (!list.isEmpty()) {
-            list.get(list.size() - 1).setUtilizationModelCpu(
+            Cloudlet lastCloudlet = list.get(list.size() - 1);
+            lastCloudlet.setLength(lastCloudlet.getLength() * 2); 
+            
+            lastCloudlet.setUtilizationModelCpu(
                 Shared.createCpuUtilizationModel(Config.Cloudlet.INITIAL_CPU_PERCENTAGE, 1));
         }
 
@@ -190,6 +222,9 @@ public final class MigrationRandomFitPolicy {
      *
      * RANDOM FIT: entre os destinos válidos (que tenham recursos
      * suficientes), escolhe um Host ALEATORIAMENTE.
+     *
+     * IMPORTANTE: este método NÃO deve acessar "broker" nem iniciar a
+     * simulação, porque ele é chamado antes de "broker" ser inicializado.
      */
     private Datacenter createDatacenter() {
         this.hostList = createHosts();
@@ -198,13 +233,13 @@ public final class MigrationRandomFitPolicy {
         // RANDOM FIT: entre os destinos válidos, escolhe um Host aleatório
         // para receber a VM migrada. Não há tentativa de consolidar nem
         // de espalhar; é puramente probabilístico.
-        
-        this.allocationPolicy = new VmAllocationPolicyMigrationRandomFit(new VmSelectionPolicyMinimumUtilization(), 
-        Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
-            // Quando um Host está sobrecarregado, seleciona primeiro uma VM
-            // de menor utilização de CPU para migrar.
 
-        this.allocationPolicy.setUnderUtilizationThreshold(Config.Host.UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
+        this.allocationPolicy = new VmAllocationPolicyMigrationRandomFit(new VmSelectionPolicyMinimumMigrationTime(),
+        Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
+        // Quando um Host está sobrecarregado, seleciona primeiro uma VM
+        // de menor utilização de CPU para migrar.
+
+        this.allocationPolicy.setUnderUtilizationThreshold(0.0001);
 
         // O Datacenter é a entidade que periodicamente atualiza os Hosts e consulta
         // a política de migração para obter um mapa VM -> Host destino.
@@ -233,7 +268,7 @@ public final class MigrationRandomFitPolicy {
         for (int i = 0; i < Config.Host.PES.length; i++) {
             final int pes = Config.Host.PES[i];
             final long ram = Config.Host.RAM[i];
-            list.add(Shared.createHost(pes, ram));
+            list.add(Shared.createHostWithFixedScheduler(pes, ram));
         }
 
         return list;
@@ -247,8 +282,6 @@ public final class MigrationRandomFitPolicy {
     private void onVmsCreatedListener(final DatacenterBrokerEventInfo info) {
         System.out.printf("# All %d VMs submitted to the broker have been created.%n",
             broker.getVmCreatedList().size());
-
-        // Ensure migration threshold is set and applied
 
         // Add a special listener that will check for possible VM migrations
         simulation.addOnClockTickListener(clock -> {

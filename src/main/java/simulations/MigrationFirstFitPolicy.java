@@ -49,7 +49,7 @@ public final class MigrationFirstFitPolicy {
 
 		new MigrationFirstFitPolicy();
 	}
-
+	
 	private MigrationFirstFitPolicy() {
 
 		Log.setLevel(
@@ -321,9 +321,7 @@ public final class MigrationFirstFitPolicy {
 				Config.Host.PES.length);
 
 		for (int i = 0; i < Config.Host.PES.length; i++) {
-
 			final int pes = Config.Host.PES[i];
-
 			final long ram = Config.Host.RAM[i];
 
 			list.add(

@@ -1,6 +1,8 @@
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationFirstFitPolicy.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationWorstFirstPolicy.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/SimulationCsvWriter.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationRandomFitPolicy.java
+/home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/VmAllocationPolicyMigrationWorstFit.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/VmAllocationPolicyMigrationRandomFit.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationTracker.java
 /home/vinny/Projetos/fucapi/Sistema Operacional/migrations-simulations/src/main/java/simulations/MigrationBestFitPolicy.java

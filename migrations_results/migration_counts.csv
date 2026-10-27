@@ -1,3 +1,5 @@
 Strategy,StartedMigrations,CompletedMigrations,SuccessfulMigrations,FailedMigrations,UnfinishedMigrations
 best_fit,5,5,5,0,0
 first_fit,11,11,11,0,0
+Random Fit,2,0,0,0,2
+worst_first,0,0,0,0,0
