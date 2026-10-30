@@ -431,41 +431,6 @@ try {
         return list;
     }
 
-    private void printInitialVmDistribution() {
-
-        System.out.println();
-        System.out.println("===== INITIAL VM DISTRIBUTION =====");
-
-        long hostsWithVms = hostList.stream()
-                .filter(host -> !host.getVmList().isEmpty())
-                .count();
-
-        System.out.printf(
-                "Hosts with VMs: %d%n",
-                hostsWithVms);
-
-        hostList.stream()
-                .filter(host -> !host.getVmList().isEmpty())
-                .sorted(
-                        Comparator.comparingLong(
-                                Host::getId))
-                .forEach(host -> {
-
-                    System.out.printf(
-                            "Host %d -> VMs: %d | "
-                                    + "Total MIPS: %.0f | "
-                                    + "Allocated MIPS: %.0f | "
-                                    + "Available MIPS: %.0f%n",
-                            host.getId(),
-                            host.getVmList().size(),
-                            host.getTotalMipsCapacity(),
-                            host.getTotalAllocatedMips(),
-                            host.getTotalAvailableMips());
-                });
-
-        System.out.println("===================================");
-    }
-
     /**
      * Executado quando todas as VMs submetidas
      * pelo Broker foram criadas.

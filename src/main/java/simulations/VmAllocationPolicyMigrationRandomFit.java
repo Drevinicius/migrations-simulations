@@ -1,12 +1,16 @@
 package simulations;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationAbstract;
 import org.cloudsimplus.hosts.Host;
@@ -34,6 +38,13 @@ public class VmAllocationPolicyMigrationRandomFit
     private final MigrationTracker migrationTracker;
 
     /**
+     * Hosts que são fontes potenciais de migração no lote atualmente
+     * planejado e, por isso, não podem ser usados como destino nesse
+     * mesmo lote. Fora de getOptimizedAllocationMap, o conjunto fica vazio.
+     */
+    private Set<Long> blockedTargetHostIds = Collections.emptySet();
+
+    /**
      * Índice usado apenas durante a alocação inicial.
      *
      * Replica o comportamento da implementação nativa
@@ -56,11 +67,32 @@ public class VmAllocationPolicyMigrationRandomFit
     public Map<Vm, Host> getOptimizedAllocationMap(
             final List<? extends Vm> vmList) {
 
-        final Map<Vm, Host> migrationMap =
-                super.getOptimizedAllocationMap(vmList);
+        /*
+         * Captura o estado real antes que o CloudSim Plus remova VMs
+         * temporariamente para construir o plano de migração.
+         *
+         * Um Host sobrecarregado pode ser origem de uma migração neste lote.
+         * Bloqueá-lo como destino evita escolher capacidade que só estará
+         * disponível depois que outra VM do mesmo lote sair.
+         */
+        blockedTargetHostIds = getHostList().stream()
+                .filter(this::isOverloaded)
+                .map(Host::getId)
+                .collect(Collectors.toCollection(HashSet::new));
 
-        migrationTracker.recordPlanned(migrationMap);
-        return migrationMap;
+        try {
+            final Map<Vm, Host> migrationMap =
+                    super.getOptimizedAllocationMap(vmList);
+
+            migrationTracker.recordPlanned(migrationMap);
+            return migrationMap;
+        } finally {
+            /*
+             * A restrição só existe durante o planejamento da migração.
+             * Assim, a alocação inicial continua reproduzindo o First Fit.
+             */
+            blockedTargetHostIds = Collections.emptySet();
+        }
     }
 
     @Override
@@ -89,6 +121,7 @@ public class VmAllocationPolicyMigrationRandomFit
         final List<Host> suitableHosts = getHostList()
                 .stream()
                 .filter(predicate)
+                .filter(host -> !blockedTargetHostIds.contains(host.getId()))
                 .toList();
 
         System.out.printf(
