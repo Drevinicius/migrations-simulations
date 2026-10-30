@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level;
 
 import simulations.Shared.Config;
 
-import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationFirstFitStaticThreshold;
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationStaticThreshold;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
@@ -280,9 +279,10 @@ public final class MigrationFirstFitPolicy {
 
 		System.out.println();
 
-		allocationPolicy = new VmAllocationPolicyMigrationFirstFitStaticThreshold(
+		allocationPolicy = new TrackedVmAllocationPolicyMigrationFirstFitStaticThreshold(
 				new VmSelectionPolicyMinimumUtilization(),
-				Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
+				Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION,
+				migrationTracker);
 
 		allocationPolicy.setUnderUtilizationThreshold(
 				Config.Host.UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);

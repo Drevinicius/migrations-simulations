@@ -3,6 +3,8 @@ package simulations;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -27,6 +29,8 @@ public class VmAllocationPolicyMigrationWorstFit
 
     private final double overUtilizationThreshold;
 
+    private final MigrationTracker migrationTracker;
+
     /**
      * Índice utilizado exclusivamente durante
      * a alocação inicial.
@@ -38,11 +42,24 @@ public class VmAllocationPolicyMigrationWorstFit
 
     public VmAllocationPolicyMigrationWorstFit(
             final VmSelectionPolicy vmSelectionPolicy,
-            final double overUtilizationThreshold) {
+            final double overUtilizationThreshold,
+            final MigrationTracker migrationTracker) {
 
         super(vmSelectionPolicy);
 
         this.overUtilizationThreshold = overUtilizationThreshold;
+        this.migrationTracker = Objects.requireNonNull(migrationTracker);
+    }
+
+    @Override
+    public Map<Vm, Host> getOptimizedAllocationMap(
+            final List<? extends Vm> vmList) {
+
+        final Map<Vm, Host> migrationMap =
+                super.getOptimizedAllocationMap(vmList);
+
+        migrationTracker.recordPlanned(migrationMap);
+        return migrationMap;
     }
 
     @Override
@@ -51,50 +68,6 @@ public class VmAllocationPolicyMigrationWorstFit
 
         return overUtilizationThreshold;
     }
-
-    // @Override
-    // protected Optional<Host> findHostForVmInternal(
-    // final Vm vm,
-    // final Predicate<Host> predicate) {
-
-    // /*
-    // * Alocação inicial.
-    // *
-    // * Enquanto a VM ainda não foi criada,
-    // * utilizamos First Fit para garantir a
-    // * mesma condição inicial das políticas
-    // * Best Fit e First Fit.
-    // */
-    // if (!vm.isCreated()) {
-
-    // return findInitialHostFirstFit(
-    // predicate);
-    // }
-
-    // /*
-    // * A VM já existe.
-    // *
-    // * Neste ponto estamos escolhendo um novo
-    // * Host durante uma realocação/migração.
-    // *
-    // * O predicate já contém as validações
-    // * realizadas internamente pelo CloudSim Plus.
-    // */
-
-    // /*
-    // * Worst Fit:
-    // *
-    // * dentre os Hosts válidos, escolhe aquele
-    // * com a MAIOR quantidade absoluta de MIPS
-    // * disponíveis.
-    // */
-    // return getHostList()
-    // .stream()
-    // .filter(predicate)
-    // .max(
-    // Comparator.comparingDouble(
-    // Host::getTotalAvailableMips));
-    // }
 
     @Override
     protected Optional<Host> findHostForVmInternal(

@@ -27,8 +27,8 @@ public final class MigrationCsvWriter {
             RESULTS_DIR.resolve("migration_counts.csv");
 
     private static final String HEADER =
-            "Strategy,StartedMigrations,CompletedMigrations,"
-            + "SuccessfulMigrations,FailedMigrations,UnfinishedMigrations";
+            "Strategy,PlannedMigrations,StartedMigrations,CompletedMigrations,"
+            + "SuccessfulMigrations,FailedMigrations,NotStartedMigrations,UnfinishedMigrations";
 
     private MigrationCsvWriter() {
         // Classe utilitária: não deve ser instanciada.
@@ -94,10 +94,6 @@ public final class MigrationCsvWriter {
                     StandardCopyOption.ATOMIC_MOVE
             );
         } catch (final AtomicMoveNotSupportedException e) {
-            /*
-             * Alguns sistemas de arquivos não suportam movimento atômico.
-             * Nesse caso, faz a substituição normal.
-             */
             Files.move(
                     temporaryFile,
                     OUTPUT_FILE,
@@ -107,17 +103,13 @@ public final class MigrationCsvWriter {
     }
 
     /**
-     * Lê as estratégias já existentes no CSV.
+     * Lê estratégias já existentes no CSV.
      *
-     * Também aceita o formato anterior:
+     * Formato novo (8 colunas): mantém a linha como está.
      *
-     * Strategy,Migrations,SuccessfulMigrations,
-     * FailedMigrations,UnfinishedMigrations
-     *
-     * Nesse caso:
-     *
-     * StartedMigrations = Migrations
-     * CompletedMigrations = SuccessfulMigrations + FailedMigrations
+     * Formatos antigos (6 ou 5 colunas): os campos PlannedMigrations e
+     * NotStartedMigrations ficam vazios, pois essa informação não existia e
+     * não deve ser inventada para resultados históricos.
      */
     private static Map<String, String> readExistingRows()
             throws IOException {
@@ -136,81 +128,66 @@ public final class MigrationCsvWriter {
                 );
 
         for (int i = 1; i < lines.size(); i++) {
-
             final String line = lines.get(i).trim();
 
             if (line.isEmpty()) {
                 continue;
             }
 
-            final String[] columns =
-                    line.split(",", -1);
+            final String[] columns = line.split(",", -1);
 
             /*
-             * Formato atual:
-             *
-             * Strategy
-             * Started
-             * Completed
-             * Successful
-             * Failed
-             * Unfinished
+             * Formato novo:
+             * Strategy, Planned, Started, Completed, Successful, Failed,
+             * NotStarted, Unfinished
              */
-            if (columns.length == 6
-                    && !columns[0].isBlank()) {
-
-                rowsByStrategy.put(
-                        columns[0],
-                        line
-                );
-
+            if (columns.length == 8 && !columns[0].isBlank()) {
+                rowsByStrategy.put(columns[0], line);
                 continue;
             }
 
             /*
-             * Formato anterior:
-             *
-             * Strategy
-             * Migrations
-             * Successful
-             * Failed
-             * Unfinished
+             * Formato anterior de 6 colunas:
+             * Strategy, Started, Completed, Successful, Failed, Unfinished
              */
-            if (columns.length == 5
-                    && !columns[0].isBlank()) {
+            if (columns.length == 6 && !columns[0].isBlank()) {
+                final String convertedRow = String.format(
+                        "%s,,%s,%s,%s,%s,,%s",
+                        columns[0],
+                        columns[1],
+                        columns[2],
+                        columns[3],
+                        columns[4],
+                        columns[5]
+                );
 
+                rowsByStrategy.put(columns[0], convertedRow);
+                continue;
+            }
+
+            /*
+             * Formato ainda mais antigo de 5 colunas:
+             * Strategy, Migrations, Successful, Failed, Unfinished
+             */
+            if (columns.length == 5 && !columns[0].isBlank()) {
                 try {
-                    final int started =
-                            Integer.parseInt(columns[1]);
+                    final int started = Integer.parseInt(columns[1]);
+                    final int successful = Integer.parseInt(columns[2]);
+                    final int failed = Integer.parseInt(columns[3]);
+                    final int unfinished = Integer.parseInt(columns[4]);
+                    final int completed = successful + failed;
 
-                    final int successful =
-                            Integer.parseInt(columns[2]);
-
-                    final int failed =
-                            Integer.parseInt(columns[3]);
-
-                    final int unfinished =
-                            Integer.parseInt(columns[4]);
-
-                    final int completed =
-                            successful + failed;
-
-                    final String convertedRow =
-                            String.format(
-                                    "%s,%d,%d,%d,%d,%d",
-                                    columns[0],
-                                    started,
-                                    completed,
-                                    successful,
-                                    failed,
-                                    unfinished
-                            );
-
-                    rowsByStrategy.put(
+                    final String convertedRow = String.format(
+                            "%s,,%d,%d,%d,%d,,%d",
                             columns[0],
-                            convertedRow
+                            started,
+                            completed,
+                            successful,
+                            failed,
+                            unfinished
                     );
 
+                    rowsByStrategy.put(columns[0], convertedRow);
                 } catch (final NumberFormatException e) {
                     System.err.printf(
                             "Warning: invalid migration CSV row ignored: %s%n",
@@ -231,12 +208,14 @@ public final class MigrationCsvWriter {
             final MigrationTracker tracker) {
 
         return String.format(
-                "%s,%d,%d,%d,%d,%d",
+                "%s,%d,%d,%d,%d,%d,%d,%d",
                 strategy,
+                tracker.getPlanned(),
                 tracker.getStarted(),
                 tracker.getCompleted(),
                 tracker.getSuccessful(),
                 tracker.getFailed(),
+                tracker.getNotStarted(),
                 tracker.getUnfinished()
         );
     }

@@ -365,7 +365,8 @@ public final class MigrationRandomFitPolicy {
          */
         this.allocationPolicy = new VmAllocationPolicyMigrationRandomFit(
                 new VmSelectionPolicyMinimumUtilization(),
-                Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
+                Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION,
+                migrationTracker);
 
         this.allocationPolicy
                 .setUnderUtilizationThreshold(

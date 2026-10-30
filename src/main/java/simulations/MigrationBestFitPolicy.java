@@ -3,7 +3,6 @@ package simulations;
 import ch.qos.logback.classic.Level;
 import simulations.Shared.Config;
 
-import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationBestFitStaticThreshold;
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationStaticThreshold;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
@@ -201,11 +200,12 @@ public final class MigrationBestFitPolicy {
 
         // BEST FIT: entre os destinos válidos, prefere o Host com MENOS MIPS livres
         // (isto é, o Host já mais preenchido), promovendo consolidação.
-        this.allocationPolicy = new VmAllocationPolicyMigrationBestFitStaticThreshold(
+        this.allocationPolicy = new TrackedVmAllocationPolicyMigrationBestFitStaticThreshold(
                 // Quando um Host está sobrecarregado, seleciona primeiro uma VM
                 // de menor utilização de CPU para migrar.
                 new VmSelectionPolicyMinimumUtilization(),
-                Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
+                Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION,
+                migrationTracker);
         this.allocationPolicy.setUnderUtilizationThreshold(Config.Host.UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
 
         // O Datacenter é a entidade que periodicamente atualiza os Hosts e consulta

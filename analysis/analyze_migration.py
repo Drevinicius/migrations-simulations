@@ -55,14 +55,19 @@ def load_migration_counts(file_path):
     Formato atual esperado:
 
     Strategy,
+    PlannedMigrations,
     StartedMigrations,
     CompletedMigrations,
     SuccessfulMigrations,
     FailedMigrations,
+    NotStartedMigrations,
     UnfinishedMigrations
 
-    Também mantém compatibilidade com o formato anterior,
-    que utilizava Migrations no lugar de StartedMigrations.
+    Compatibilidade mantida com resultados antigos:
+    - Migrations -> StartedMigrations;
+    - arquivos sem PlannedMigrations/NotStartedMigrations continuam válidos;
+    - métricas de planejamento ausentes permanecem como dados desconhecidos,
+      em vez de serem assumidas como zero ou iguais às migrações iniciadas.
     """
 
     df = pd.read_csv(file_path)
@@ -78,7 +83,7 @@ def load_migration_counts(file_path):
             }
         )
 
-    numeric_columns = [
+    required_numeric_columns = [
         'StartedMigrations',
         'CompletedMigrations',
         'SuccessfulMigrations',
@@ -86,12 +91,25 @@ def load_migration_counts(file_path):
         'UnfinishedMigrations'
     ]
 
-    for column in numeric_columns:
+    optional_numeric_columns = [
+        'PlannedMigrations',
+        'NotStartedMigrations'
+    ]
+
+    for column in required_numeric_columns:
         if column in df.columns:
             df[column] = pd.to_numeric(
                 df[column],
                 errors='coerce'
             ).fillna(0).astype(int)
+
+    # Para dados históricos, não converte ausência de planejamento em zero.
+    for column in optional_numeric_columns:
+        if column in df.columns:
+            df[column] = pd.to_numeric(
+                df[column],
+                errors='coerce'
+            ).astype('Int64')
 
     # Compatibilidade caso o CSV ainda não possua CompletedMigrations.
     if (
@@ -333,6 +351,25 @@ def discover_strategies(
                     {}
                 )
 
+                planned = None
+                not_started = None
+
+                if (
+                    'PlannedMigrations' in counts_df.columns
+                    and pd.notna(row['PlannedMigrations'])
+                ):
+                    planned = int(
+                        row['PlannedMigrations']
+                    )
+
+                if (
+                    'NotStartedMigrations' in counts_df.columns
+                    and pd.notna(row['NotStartedMigrations'])
+                ):
+                    not_started = int(
+                        row['NotStartedMigrations']
+                    )
+
                 started = int(
                     row['StartedMigrations']
                 )
@@ -353,14 +390,23 @@ def discover_strategies(
                     row['UnfinishedMigrations']
                 )
 
-                consistent = (
+                lifecycle_consistent = (
                     started
                     == completed + unfinished
                     and completed
                     == successful + failed
                 )
 
-                if not consistent:
+                planning_consistent = (
+                    planned is None
+                    or not_started is None
+                    or planned == started + not_started
+                )
+
+                if not (
+                    lifecycle_consistent
+                    and planning_consistent
+                ):
                     print(
                         'Warning: inconsistent migration counters '
                         f"for strategy '{strategy_name}'."
@@ -369,10 +415,12 @@ def discover_strategies(
                 strategies[
                     strategy_name
                 ]['migrations'] = {
+                    'planned': planned,
                     'started': started,
                     'completed': completed,
                     'successful': successful,
                     'failed': failed,
+                    'not_started': not_started,
                     'unfinished': unfinished
                 }
 
@@ -996,6 +1044,100 @@ def plot_total_execution_time_comparison(
     plt.close()
 
 
+def plot_migration_counts_comparison(results):
+    """
+    Gera um gráfico geral do ciclo de vida das migrações por estratégia.
+
+    Exibe, quando disponíveis:
+    - planejadas;
+    - iniciadas;
+    - concluídas;
+    - bem-sucedidas;
+    - falhas;
+    - planejadas que não iniciaram;
+    - iniciadas que não terminaram.
+
+    Métricas inexistentes em CSVs históricos são omitidas do gráfico.
+    """
+
+    rows = []
+
+    for strategy, data in results.items():
+        migrations = data.get('migrations')
+
+        if migrations is None:
+            continue
+
+        rows.append({
+            'Strategy': strategy,
+            'Planned': migrations.get('planned'),
+            'Started': migrations.get('started'),
+            'Completed': migrations.get('completed'),
+            'Successful': migrations.get('successful'),
+            'Failed': migrations.get('failed'),
+            'Not Started': migrations.get('not_started'),
+            'Unfinished': migrations.get('unfinished')
+        })
+
+    if not rows:
+        print(
+            'No migration count data available for plotting.'
+        )
+        return
+
+    plot_df = pd.DataFrame(rows).set_index('Strategy')
+
+    # Remove métricas que não possuem nenhum valor conhecido.
+    plot_df = plot_df.dropna(
+        axis=1,
+        how='all'
+    )
+
+    if plot_df.empty:
+        return
+
+    PLOTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    ax = plot_df.plot(
+        kind='bar',
+        figsize=(14, 7)
+    )
+
+    ax.set_title(
+        'VM Migration Lifecycle by Strategy'
+    )
+
+    ax.set_xlabel(
+        'Migration Strategy'
+    )
+
+    ax.set_ylabel(
+        'Number of VM Migrations'
+    )
+
+    ax.tick_params(
+        axis='x',
+        rotation=0
+    )
+
+    ax.legend(
+        title='Migration State',
+        ncol=2
+    )
+
+    plt.tight_layout()
+
+    plt.savefig(
+        PLOTS_DIR
+        / 'migration_counts_comparison.png'
+    )
+
+    plt.close()
+
+
 def plot_vm_distribution(strategies):
 
     PLOTS_DIR.mkdir(
@@ -1173,6 +1315,11 @@ def generate_comparison_table(results):
         if migrations is not None:
 
             row.update({
+                'Planned Migrations':
+                    migrations.get(
+                        'planned'
+                    ),
+
                 'Started Migrations':
                     migrations[
                         'started'
@@ -1192,6 +1339,11 @@ def generate_comparison_table(results):
                     migrations[
                         'failed'
                     ],
+
+                'Not Started Migrations':
+                    migrations.get(
+                        'not_started'
+                    ),
 
                 'Unfinished Migrations':
                     migrations[
@@ -1376,6 +1528,12 @@ def print_analysis_summary(results):
                 'Migrations:'
             )
 
+            if migrations.get('planned') is not None:
+                print(
+                    '  Planned: '
+                    f"{migrations['planned']}"
+                )
+
             print(
                 '  Started: '
                 f"{migrations['started']}"
@@ -1395,6 +1553,12 @@ def print_analysis_summary(results):
                 '  Failed: '
                 f"{migrations['failed']}"
             )
+
+            if migrations.get('not_started') is not None:
+                print(
+                    '  Not Started: '
+                    f"{migrations['not_started']}"
+                )
 
             print(
                 '  Unfinished: '
@@ -1473,6 +1637,10 @@ def main():
     )
 
     plot_total_execution_time_comparison(
+        results
+    )
+
+    plot_migration_counts_comparison(
         results
     )
 

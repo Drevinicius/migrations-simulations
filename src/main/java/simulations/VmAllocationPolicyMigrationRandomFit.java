@@ -2,6 +2,8 @@ package simulations;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.Predicate;
@@ -29,6 +31,8 @@ public class VmAllocationPolicyMigrationRandomFit
 
     private final double overUtilizationThreshold;
 
+    private final MigrationTracker migrationTracker;
+
     /**
      * Índice usado apenas durante a alocação inicial.
      *
@@ -39,11 +43,24 @@ public class VmAllocationPolicyMigrationRandomFit
 
     public VmAllocationPolicyMigrationRandomFit(
             final VmSelectionPolicy vmSelectionPolicy,
-            final double overUtilizationThreshold) {
+            final double overUtilizationThreshold,
+            final MigrationTracker migrationTracker) {
 
         super(vmSelectionPolicy);
 
         this.overUtilizationThreshold = overUtilizationThreshold;
+        this.migrationTracker = Objects.requireNonNull(migrationTracker);
+    }
+
+    @Override
+    public Map<Vm, Host> getOptimizedAllocationMap(
+            final List<? extends Vm> vmList) {
+
+        final Map<Vm, Host> migrationMap =
+                super.getOptimizedAllocationMap(vmList);
+
+        migrationTracker.recordPlanned(migrationMap);
+        return migrationMap;
     }
 
     @Override
@@ -52,70 +69,7 @@ public class VmAllocationPolicyMigrationRandomFit
 
         return overUtilizationThreshold;
     }
-
-    // @Override
-    // protected Optional<Host> findHostForVmInternal(
-    // final Vm vm,
-    // final Predicate<Host> predicate) {
-
-    // /*
-    // * Se a VM ainda não foi criada, estamos na
-    // * alocação inicial.
-    // *
-    // * Nesse momento usamos First Fit para que
-    // * Random, Worst, Best e First partam da mesma
-    // * distribuição inicial.
-    // */
-    // if (!vm.isCreated()) {
-
-    // return findInitialHostFirstFit(
-    // predicate
-    // );
-    // }
-
-    // /*
-    // * Se a VM já existe, estamos buscando um
-    // * novo Host para uma realocação/migração.
-    // *
-    // * O predicate recebido do CloudSim Plus
-    // * já verifica:
-    // *
-    // * - se o Host é diferente do atual;
-    // * - se o Host possui recursos para a VM;
-    // * - se o Host não ficará sobrecarregado;
-    // * - outras restrições do processo de migração.
-    // *
-    // * Por isso não é necessário chamar
-    // * host.isSuitableForVm(vm) novamente.
-    // */
-    // final List<Host> suitableHosts =
-    // getHostList()
-    // .stream()
-    // .filter(predicate)
-    // .toList();
-
-    // if (suitableHosts.isEmpty()) {
-
-    // return Optional.empty();
-    // }
-
-    // /*
-    // * Random Fit:
-    // * seleciona aleatoriamente um dos Hosts
-    // * considerados válidos pelo CloudSim Plus.
-    // */
-    // final int randomIndex =
-    // random.nextInt(
-    // suitableHosts.size()
-    // );
-
-    // return Optional.of(
-    // suitableHosts.get(
-    // randomIndex
-    // )
-    // );
-    // }
-
+    
     @Override
     protected Optional<Host> findHostForVmInternal(
             final Vm vm,
