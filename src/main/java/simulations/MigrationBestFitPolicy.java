@@ -126,6 +126,12 @@ public final class MigrationBestFitPolicy {
         }
 
         try {
+            MigrationMovementCsvWriter.writeOrUpdate("best_fit", migrationTracker);
+        } catch (final IOException e) {
+            System.err.println("Error writing migration movements CSV: " + e.getMessage());
+        }
+
+try {
             SimulationCsvWriter.writeOrUpdate("best_fit", broker);
         } catch (final IOException e) {
             System.err.println("Error writing simulation counts CSV: " + e.getMessage());
@@ -236,7 +242,7 @@ public final class MigrationBestFitPolicy {
         for (int i = 0; i < Config.Host.PES.length; i++) {
             final int pes = Config.Host.PES[i];
             final long ram = Config.Host.RAM[i];
-            list.add(Shared.createHost(pes, ram));
+            list.add(Shared.createHostWithFixedScheduler(pes, ram));
         }
 
         return list;

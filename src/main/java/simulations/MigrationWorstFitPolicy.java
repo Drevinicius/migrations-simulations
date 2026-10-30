@@ -206,6 +206,12 @@ public final class MigrationWorstFitPolicy {
          * - Cloudlets finalizadas.
          */
         try {
+            MigrationMovementCsvWriter.writeOrUpdate("worst_first", migrationTracker);
+        } catch (final IOException e) {
+            System.err.println("Error writing migration movements CSV: " + e.getMessage());
+        }
+
+try {
 
             SimulationCsvWriter.writeOrUpdate(
                     "worst_first",
@@ -401,7 +407,7 @@ public final class MigrationWorstFitPolicy {
             final long ram = Config.Host.RAM[i];
 
             list.add(
-                    Shared.createHost(
+                    Shared.createHostWithFixedScheduler(
                             pes,
                             ram));
         }

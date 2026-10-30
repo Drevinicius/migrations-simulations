@@ -167,6 +167,12 @@ public final class MigrationFirstFitPolicy {
 		}
 
 		try {
+            MigrationMovementCsvWriter.writeOrUpdate("first_fit", migrationTracker);
+        } catch (final IOException e) {
+            System.err.println("Error writing migration movements CSV: " + e.getMessage());
+        }
+
+try {
 			SimulationCsvWriter.writeOrUpdate("first_fit", broker);
 		} catch (final IOException e) {
 			System.err.println(

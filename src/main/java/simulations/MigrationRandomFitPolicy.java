@@ -212,6 +212,12 @@ public final class MigrationRandomFitPolicy {
          * e quantas realmente terminaram.
          */
         try {
+            MigrationMovementCsvWriter.writeOrUpdate("random_fit", migrationTracker);
+        } catch (final IOException e) {
+            System.err.println("Error writing migration movements CSV: " + e.getMessage());
+        }
+
+try {
             SimulationCsvWriter.writeOrUpdate(
                     "random_fit",
                     broker);
@@ -417,7 +423,7 @@ public final class MigrationRandomFitPolicy {
             final long ram = Config.Host.RAM[i];
 
             list.add(
-                    Shared.createHost(
+                    Shared.createHostWithFixedScheduler(
                             pes,
                             ram));
         }
