@@ -43,8 +43,7 @@ public class VmAllocationPolicyMigrationRandomFit
 
         super(vmSelectionPolicy);
 
-        this.overUtilizationThreshold =
-                overUtilizationThreshold;
+        this.overUtilizationThreshold = overUtilizationThreshold;
     }
 
     @Override
@@ -54,67 +53,125 @@ public class VmAllocationPolicyMigrationRandomFit
         return overUtilizationThreshold;
     }
 
+    // @Override
+    // protected Optional<Host> findHostForVmInternal(
+    // final Vm vm,
+    // final Predicate<Host> predicate) {
+
+    // /*
+    // * Se a VM ainda não foi criada, estamos na
+    // * alocação inicial.
+    // *
+    // * Nesse momento usamos First Fit para que
+    // * Random, Worst, Best e First partam da mesma
+    // * distribuição inicial.
+    // */
+    // if (!vm.isCreated()) {
+
+    // return findInitialHostFirstFit(
+    // predicate
+    // );
+    // }
+
+    // /*
+    // * Se a VM já existe, estamos buscando um
+    // * novo Host para uma realocação/migração.
+    // *
+    // * O predicate recebido do CloudSim Plus
+    // * já verifica:
+    // *
+    // * - se o Host é diferente do atual;
+    // * - se o Host possui recursos para a VM;
+    // * - se o Host não ficará sobrecarregado;
+    // * - outras restrições do processo de migração.
+    // *
+    // * Por isso não é necessário chamar
+    // * host.isSuitableForVm(vm) novamente.
+    // */
+    // final List<Host> suitableHosts =
+    // getHostList()
+    // .stream()
+    // .filter(predicate)
+    // .toList();
+
+    // if (suitableHosts.isEmpty()) {
+
+    // return Optional.empty();
+    // }
+
+    // /*
+    // * Random Fit:
+    // * seleciona aleatoriamente um dos Hosts
+    // * considerados válidos pelo CloudSim Plus.
+    // */
+    // final int randomIndex =
+    // random.nextInt(
+    // suitableHosts.size()
+    // );
+
+    // return Optional.of(
+    // suitableHosts.get(
+    // randomIndex
+    // )
+    // );
+    // }
+
     @Override
     protected Optional<Host> findHostForVmInternal(
             final Vm vm,
             final Predicate<Host> predicate) {
 
         /*
-         * Se a VM ainda não foi criada, estamos na
-         * alocação inicial.
-         *
-         * Nesse momento usamos First Fit para que
-         * Random, Worst, Best e First partam da mesma
-         * distribuição inicial.
+         * Apenas alocação inicial.
          */
-        if (!vm.isCreated()) {
-
-            return findInitialHostFirstFit(
-                    predicate
-            );
+        if (vm.getHost() == null || vm.getHost().getId() < 0) {
+            return findInitialHostFirstFit(predicate);
         }
 
         /*
-         * Se a VM já existe, estamos buscando um
-         * novo Host para uma realocação/migração.
-         *
-         * O predicate recebido do CloudSim Plus
-         * já verifica:
-         *
-         * - se o Host é diferente do atual;
-         * - se o Host possui recursos para a VM;
-         * - se o Host não ficará sobrecarregado;
-         * - outras restrições do processo de migração.
-         *
-         * Por isso não é necessário chamar
-         * host.isSuitableForVm(vm) novamente.
+         * A VM já possui Host.
+         * Agora aplicamos Random Fit.
          */
-        final List<Host> suitableHosts =
-                getHostList()
-                        .stream()
-                        .filter(predicate)
-                        .toList();
+        final List<Host> suitableHosts = getHostList()
+                .stream()
+                .filter(predicate)
+                .toList();
+
+        System.out.printf(
+                "%n[RANDOM MIGRATION] VM %d | sourceHost=%d | candidates=%d%n",
+                vm.getId(),
+                vm.getHost().getId(),
+                suitableHosts.size());
+
+        System.out.printf(
+                "[RANDOM MIGRATION] Candidates: %s%n",
+                suitableHosts.stream()
+                        .map(host -> String.format(
+                                "%d(availableMips=%.0f)",
+                                host.getId(),
+                                host.getTotalAvailableMips()))
+                        .toList());
 
         if (suitableHosts.isEmpty()) {
-
             return Optional.empty();
         }
 
-        /*
-         * Random Fit:
-         * seleciona aleatoriamente um dos Hosts
-         * considerados válidos pelo CloudSim Plus.
-         */
-        final int randomIndex =
-                random.nextInt(
-                        suitableHosts.size()
-                );
+        final int randomIndex = random.nextInt(
+                suitableHosts.size());
+
+        final Host selectedHost = suitableHosts.get(
+                randomIndex);
+
+        System.out.printf(
+                "[RANDOM MIGRATION] VM %d | Host %d -> Host %d | selectedIndex=%d/%d%n%n",
+                vm.getId(),
+                vm.getHost().getId(),
+                selectedHost.getId(),
+                randomIndex,
+                suitableHosts.size() - 1);
 
         return Optional.of(
-                suitableHosts.get(
-                        randomIndex
-                )
-        );
+                selectedHost);
     }
 
     /**
@@ -125,11 +182,9 @@ public class VmAllocationPolicyMigrationRandomFit
     private Optional<Host> findInitialHostFirstFit(
             final Predicate<Host> predicate) {
 
-        final List<Host> hosts =
-                getHostList();
+        final List<Host> hosts = getHostList();
 
-        final int hostCount =
-                hosts.size();
+        final int hostCount = hosts.size();
 
         if (hostCount == 0) {
 
@@ -147,21 +202,17 @@ public class VmAllocationPolicyMigrationRandomFit
          */
         for (int i = 0; i < hostCount; i++) {
 
-            final Host host =
-                    hosts.get(
-                            initialLastHostIndex
-                    );
+            final Host host = hosts.get(
+                    initialLastHostIndex);
 
             if (predicate.test(host)) {
 
                 return Optional.of(
-                        host
-                );
+                        host);
             }
 
-            initialLastHostIndex =
-                    (initialLastHostIndex + 1)
-                            % hostCount;
+            initialLastHostIndex = (initialLastHostIndex + 1)
+                    % hostCount;
         }
 
         return Optional.empty();
@@ -177,12 +228,10 @@ public class VmAllocationPolicyMigrationRandomFit
      * UnsupportedOperationException.
      */
     @Override
-    protected List<? extends Vm>
-            getVmsToMigrateFromUnderUtilizedHost(
-                    final Host host) {
+    protected List<? extends Vm> getVmsToMigrateFromUnderUtilizedHost(
+            final Host host) {
 
         return new ArrayList<>(
-                host.getMigratableVms()
-        );
+                host.getMigratableVms());
     }
 }

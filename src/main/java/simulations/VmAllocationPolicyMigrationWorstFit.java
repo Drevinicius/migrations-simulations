@@ -42,8 +42,7 @@ public class VmAllocationPolicyMigrationWorstFit
 
         super(vmSelectionPolicy);
 
-        this.overUtilizationThreshold =
-                overUtilizationThreshold;
+        this.overUtilizationThreshold = overUtilizationThreshold;
     }
 
     @Override
@@ -53,51 +52,107 @@ public class VmAllocationPolicyMigrationWorstFit
         return overUtilizationThreshold;
     }
 
+    // @Override
+    // protected Optional<Host> findHostForVmInternal(
+    // final Vm vm,
+    // final Predicate<Host> predicate) {
+
+    // /*
+    // * Alocação inicial.
+    // *
+    // * Enquanto a VM ainda não foi criada,
+    // * utilizamos First Fit para garantir a
+    // * mesma condição inicial das políticas
+    // * Best Fit e First Fit.
+    // */
+    // if (!vm.isCreated()) {
+
+    // return findInitialHostFirstFit(
+    // predicate);
+    // }
+
+    // /*
+    // * A VM já existe.
+    // *
+    // * Neste ponto estamos escolhendo um novo
+    // * Host durante uma realocação/migração.
+    // *
+    // * O predicate já contém as validações
+    // * realizadas internamente pelo CloudSim Plus.
+    // */
+
+    // /*
+    // * Worst Fit:
+    // *
+    // * dentre os Hosts válidos, escolhe aquele
+    // * com a MAIOR quantidade absoluta de MIPS
+    // * disponíveis.
+    // */
+    // return getHostList()
+    // .stream()
+    // .filter(predicate)
+    // .max(
+    // Comparator.comparingDouble(
+    // Host::getTotalAvailableMips));
+    // }
+
     @Override
     protected Optional<Host> findHostForVmInternal(
             final Vm vm,
             final Predicate<Host> predicate) {
 
         /*
-         * Alocação inicial.
+         * Apenas alocação inicial.
          *
-         * Enquanto a VM ainda não foi criada,
-         * utilizamos First Fit para garantir a
-         * mesma condição inicial das políticas
-         * Best Fit e First Fit.
+         * Uma VM ainda não alocada possui Host inválido
+         * (ID negativo).
          */
-        if (!vm.isCreated()) {
-
-            return findInitialHostFirstFit(
-                    predicate
-            );
+        if (vm.getHost() == null || vm.getHost().getId() < 0) {
+            return findInitialHostFirstFit(predicate);
         }
 
         /*
-         * A VM já existe.
-         *
-         * Neste ponto estamos escolhendo um novo
-         * Host durante uma realocação/migração.
-         *
-         * O predicate já contém as validações
-         * realizadas internamente pelo CloudSim Plus.
+         * A VM já possui Host de origem.
+         * Portanto, estamos escolhendo destino
+         * para uma realocação/migração.
          */
-
-        /*
-         * Worst Fit:
-         *
-         * dentre os Hosts válidos, escolhe aquele
-         * com a MAIOR quantidade absoluta de MIPS
-         * disponíveis.
-         */
-        return getHostList()
+        final List<Host> suitableHosts = getHostList()
                 .stream()
                 .filter(predicate)
+                .toList();
+
+        System.out.printf(
+                "%n[WORST MIGRATION] VM %d | sourceHost=%d | candidates=%d%n",
+                vm.getId(),
+                vm.getHost().getId(),
+                suitableHosts.size());
+
+        System.out.printf(
+                "[WORST MIGRATION] Candidates: %s%n",
+                suitableHosts.stream()
+                        .map(host -> String.format(
+                                "%d(availableMips=%.0f)",
+                                host.getId(),
+                                host.getTotalAvailableMips()))
+                        .toList());
+
+        if (suitableHosts.isEmpty()) {
+            return Optional.empty();
+        }
+
+        final Optional<Host> selectedHost = suitableHosts.stream()
                 .max(
                         Comparator.comparingDouble(
-                                Host::getTotalAvailableMips
-                        )
-                );
+                                Host::getTotalAvailableMips));
+
+        selectedHost.ifPresent(host -> System.out.printf(
+                "[WORST MIGRATION] VM %d | Host %d -> Host %d | availableMips=%.0f%n%n",
+                vm.getId(),
+                vm.getHost().getId(),
+                host.getId(),
+                host.getTotalAvailableMips()));
+
+        return selectedHost;
     }
 
     /**
@@ -109,11 +164,9 @@ public class VmAllocationPolicyMigrationWorstFit
     private Optional<Host> findInitialHostFirstFit(
             final Predicate<Host> predicate) {
 
-        final List<Host> hosts =
-                getHostList();
+        final List<Host> hosts = getHostList();
 
-        final int hostCount =
-                hosts.size();
+        final int hostCount = hosts.size();
 
         if (hostCount == 0) {
 
@@ -122,10 +175,8 @@ public class VmAllocationPolicyMigrationWorstFit
 
         for (int i = 0; i < hostCount; i++) {
 
-            final Host host =
-                    hosts.get(
-                            initialLastHostIndex
-                    );
+            final Host host = hosts.get(
+                    initialLastHostIndex);
 
             /*
              * O predicate já verifica todos os
@@ -135,17 +186,15 @@ public class VmAllocationPolicyMigrationWorstFit
             if (predicate.test(host)) {
 
                 return Optional.of(
-                        host
-                );
+                        host);
             }
 
             /*
              * O Host atual não pode receber a VM.
              * Avança para o próximo Host.
              */
-            initialLastHostIndex =
-                    (initialLastHostIndex + 1)
-                            % hostCount;
+            initialLastHostIndex = (initialLastHostIndex + 1)
+                    % hostCount;
         }
 
         return Optional.empty();
@@ -159,12 +208,10 @@ public class VmAllocationPolicyMigrationWorstFit
      * UnsupportedOperationException.
      */
     @Override
-    protected List<? extends Vm>
-            getVmsToMigrateFromUnderUtilizedHost(
-                    final Host host) {
+    protected List<? extends Vm> getVmsToMigrateFromUnderUtilizedHost(
+            final Host host) {
 
         return new ArrayList<>(
-                host.getMigratableVms()
-        );
+                host.getMigratableVms());
     }
 }
