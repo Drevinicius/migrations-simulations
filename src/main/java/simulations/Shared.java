@@ -219,8 +219,7 @@ public class Shared {
 
             public static final int RAM = 16_000;
 
-            public static final double BW =
-                    Config.Host.BW / (double) PES.length;
+            public static final double BW = Config.Host.BW / (double) PES.length;
         }
 
         public static final class Cloudlet {
@@ -261,23 +260,19 @@ public class Shared {
             final Host targetHost,
             final double time) {
 
-        final String msg =
-                String.format(
-                        "# %.2f: %s in %s: total allocated",
-                        time,
-                        vm,
-                        targetHost);
+        final String msg = String.format(
+                "# %.2f: %s in %s: total allocated",
+                time,
+                vm,
+                targetHost);
 
-        final MipsShare allocatedMips =
-                targetHost
-                        .getVmScheduler()
-                        .getAllocatedMips(vm);
+        final MipsShare allocatedMips = targetHost
+                .getVmScheduler()
+                .getAllocatedMips(vm);
 
-        final String msg2 =
-                allocatedMips.totalMips()
-                        == Config.VM.MIPS * 0.9
-                        ? " - reduction due to migration overhead"
-                        : "";
+        final String msg2 = allocatedMips.totalMips() == Config.VM.MIPS * 0.9
+                ? " - reduction due to migration overhead"
+                : "";
 
         System.out.printf(
                 "%s %.0f MIPs (divided by %d PEs)%s%n",
@@ -312,23 +307,21 @@ public class Shared {
             final DatacenterBroker broker,
             final UtilizationModel cpuUtilizationModel) {
 
-        final UtilizationModel utilizationModelFull =
-                new UtilizationModelFull();
+        final UtilizationModel utilizationModelFull = new UtilizationModelFull();
 
-        final Cloudlet cloudlet =
-                new CloudletSimple(
-                        Config.Cloudlet.LENGTH,
-                        (int) vm.getPesNumber())
-                        .setFileSize(
-                                Config.Cloudlet.FILESIZE)
-                        .setOutputSize(
-                                Config.Cloudlet.OUTPUTSIZE)
-                        .setUtilizationModelRam(
-                                utilizationModelFull)
-                        .setUtilizationModelBw(
-                                utilizationModelFull)
-                        .setUtilizationModelCpu(
-                                cpuUtilizationModel);
+        final Cloudlet cloudlet = new CloudletSimple(
+                Config.Cloudlet.LENGTH,
+                (int) vm.getPesNumber())
+                .setFileSize(
+                        Config.Cloudlet.FILESIZE)
+                .setOutputSize(
+                        Config.Cloudlet.OUTPUTSIZE)
+                .setUtilizationModelRam(
+                        utilizationModelFull)
+                .setUtilizationModelBw(
+                        utilizationModelFull)
+                .setUtilizationModelCpu(
+                        cpuUtilizationModel);
 
         broker.bindCloudletToVm(
                 cloudlet,
@@ -340,10 +333,9 @@ public class Shared {
     public static Vm createVm(
             final int pes) {
 
-        final Vm vm =
-                new VmSimple(
-                        Config.VM.MIPS,
-                        pes);
+        final Vm vm = new VmSimple(
+                Config.VM.MIPS,
+                pes);
 
         vm.setRam(Config.VM.RAM)
                 .setBw((long) Config.VM.BW)
@@ -358,42 +350,35 @@ public class Shared {
             double initialCpuUsagePercent,
             double maxCpuUsagePercentage) {
 
-        if (maxCpuUsagePercentage
-                < initialCpuUsagePercent) {
+        if (maxCpuUsagePercentage < initialCpuUsagePercent) {
 
             throw new IllegalArgumentException(
                     "Max CPU usage must be equal or greater than the initial CPU usage.");
         }
 
-        initialCpuUsagePercent =
-                Math.min(
-                        initialCpuUsagePercent,
-                        1);
+        initialCpuUsagePercent = Math.min(
+                initialCpuUsagePercent,
+                1);
 
-        maxCpuUsagePercentage =
-                Math.min(
-                        maxCpuUsagePercentage,
-                        1);
+        maxCpuUsagePercentage = Math.min(
+                maxCpuUsagePercentage,
+                1);
 
         final UtilizationModelDynamic utilizationModel;
 
-        if (initialCpuUsagePercent
-                < maxCpuUsagePercentage) {
+        if (initialCpuUsagePercent < maxCpuUsagePercentage) {
 
-            utilizationModel =
-                    new UtilizationModelDynamic(
-                            initialCpuUsagePercent)
-                            .setUtilizationUpdateFunction(
-                                    util ->
-                                            util.getUtilization()
-                                                    + util.getTimeSpan()
-                                                    * Config.Cloudlet.CPU_INCREMENT_PER_SECOND);
+            utilizationModel = new UtilizationModelDynamic(
+                    initialCpuUsagePercent)
+                    .setUtilizationUpdateFunction(
+                            util -> util.getUtilization()
+                                    + util.getTimeSpan()
+                                            * Config.Cloudlet.CPU_INCREMENT_PER_SECOND);
 
         } else {
 
-            utilizationModel =
-                    new UtilizationModelDynamic(
-                            initialCpuUsagePercent);
+            utilizationModel = new UtilizationModelDynamic(
+                    initialCpuUsagePercent);
         }
 
         utilizationModel.setMaxResourceUtilization(
@@ -445,15 +430,13 @@ public class Shared {
             final long ram,
             final boolean useFixedScheduler) {
 
-        final List<Pe> peList =
-                createPeList(pesNumber);
+        final List<Pe> peList = createPeList(pesNumber);
 
-        final Host host =
-                new HostSimple(
-                        ram,
-                        Config.Host.BW,
-                        Config.Host.STORAGE,
-                        peList);
+        final Host host = new HostSimple(
+                ram,
+                Config.Host.BW,
+                Config.Host.STORAGE,
+                peList);
 
         if (useFixedScheduler) {
 
@@ -474,31 +457,27 @@ public class Shared {
 
         if (pesNumber <= 16) {
 
-            powerModel =
-                    new PowerModelHostSimple(
-                            Config.Power.SMALL_MAX_POWER,
-                            Config.Power.SMALL_STATIC_POWER);
+            powerModel = new PowerModelHostSimple(
+                    Config.Power.SMALL_MAX_POWER,
+                    Config.Power.SMALL_STATIC_POWER);
 
         } else if (pesNumber <= 32) {
 
-            powerModel =
-                    new PowerModelHostSimple(
-                            Config.Power.MEDIUM_MAX_POWER,
-                            Config.Power.MEDIUM_STATIC_POWER);
+            powerModel = new PowerModelHostSimple(
+                    Config.Power.MEDIUM_MAX_POWER,
+                    Config.Power.MEDIUM_STATIC_POWER);
 
         } else if (pesNumber <= 64) {
 
-            powerModel =
-                    new PowerModelHostSimple(
-                            Config.Power.LARGE_MAX_POWER,
-                            Config.Power.LARGE_STATIC_POWER);
+            powerModel = new PowerModelHostSimple(
+                    Config.Power.LARGE_MAX_POWER,
+                    Config.Power.LARGE_STATIC_POWER);
 
         } else {
 
-            powerModel =
-                    new PowerModelHostSimple(
-                            Config.Power.XLARGE_MAX_POWER,
-                            Config.Power.XLARGE_STATIC_POWER);
+            powerModel = new PowerModelHostSimple(
+                    Config.Power.XLARGE_MAX_POWER,
+                    Config.Power.XLARGE_STATIC_POWER);
         }
 
         host.setPowerModel(
@@ -510,12 +489,9 @@ public class Shared {
     public static List<Pe> createPeList(
             final int pesNumber) {
 
-        final List<Pe> list =
-                new ArrayList<>(pesNumber);
+        final List<Pe> list = new ArrayList<>(pesNumber);
 
-        for (int i = 0;
-                i < pesNumber;
-                i++) {
+        for (int i = 0; i < pesNumber; i++) {
 
             list.add(
                     new PeSimple(
@@ -536,8 +512,7 @@ public class Shared {
                         + policyName
                         + " Migration Policy");
 
-        final PrintStream out =
-                csv.getPrintStream();
+        final PrintStream out = csv.getPrintStream();
 
         out.println(
                 "Host,CPUUtilization,PowerConsumption(W),TotalEnergyConsumption(Wh)");
@@ -548,20 +523,16 @@ public class Shared {
 
         for (final Host host : hostList) {
 
-            final HostResourceStats cpuStats =
-                    host.getCpuUtilizationStats();
+            final HostResourceStats cpuStats = host.getCpuUtilizationStats();
 
-            final double utilizationPercentMean =
-                    cpuStats.getMean();
+            final double utilizationPercentMean = cpuStats.getMean();
 
-            final double watts =
-                    host.getPowerModel()
-                            .getPower(
-                                    utilizationPercentMean);
+            final double watts = host.getPowerModel()
+                    .getPower(
+                            utilizationPercentMean);
 
-            final double energyWattHour =
-                    watts
-                            * (simulation.clock()
+            final double energyWattHour = watts
+                    * (simulation.clock()
                             / 3600.0);
 
             out.printf(
@@ -595,20 +566,16 @@ public class Shared {
 
         for (final Host host : hostList) {
 
-            final HostResourceStats cpuStats =
-                    host.getCpuUtilizationStats();
+            final HostResourceStats cpuStats = host.getCpuUtilizationStats();
 
-            final double utilizationPercentMean =
-                    cpuStats.getMean();
+            final double utilizationPercentMean = cpuStats.getMean();
 
-            final double watts =
-                    host.getPowerModel()
-                            .getPower(
-                                    utilizationPercentMean);
+            final double watts = host.getPowerModel()
+                    .getPower(
+                            utilizationPercentMean);
 
-            final double energyWattHour =
-                    watts
-                            * (simulation.clock()
+            final double energyWattHour = watts
+                    * (simulation.clock()
                             / 3600.0);
 
             System.out.printf(
@@ -640,9 +607,8 @@ public class Shared {
             final String filename)
             throws IOException {
 
-        final PrintStream out =
-                new PrintStream(
-                        new java.io.File(filename));
+        final PrintStream out = new PrintStream(
+                new java.io.File(filename));
 
         out.println(
                 "VM ID,Host ID,VM PEs,CPU Usage Mean (%),Power Consumption (W),Status");
@@ -660,76 +626,63 @@ public class Shared {
             if (vm.getHost() == Host.NULL
                     || !vm.isCreated()) {
 
-                status =
-                        "NOT_ALLOCATED";
+                status = "NOT_ALLOCATED";
 
             } else {
 
-                status =
-                        "RUNNING";
+                status = "RUNNING";
 
-                hostId =
-                        (int) vm.getHost()
-                                .getId();
+                hostId = (int) vm.getHost()
+                        .getId();
 
-                final VmResourceStats cpuStats =
-                        vm.getCpuUtilizationStats();
+                final VmResourceStats cpuStats = vm.getCpuUtilizationStats();
 
                 if (cpuStats != null) {
 
-                    final double cpuMean =
-                            cpuStats.getMean();
+                    final double cpuMean = cpuStats.getMean();
 
                     if (!Double.isNaN(cpuMean)
                             && !vm.getHost()
-                            .getVmCreatedList()
-                            .isEmpty()) {
+                                    .getVmCreatedList()
+                                    .isEmpty()) {
 
-                        cpuUsagePercent =
-                                cpuMean * 100;
+                        cpuUsagePercent = cpuMean * 100;
 
                         try {
 
-                            final var powerModel =
-                                    vm.getHost()
-                                            .getPowerModel();
+                            final var powerModel = vm.getHost()
+                                    .getPowerModel();
 
                             if (powerModel != null) {
 
-                                final double hostStaticPower =
-                                        powerModel
-                                                instanceof PowerModelHostSimple powerModelHost
-                                                ? powerModelHost.getStaticPower()
-                                                : 0;
+                                final double hostStaticPower = powerModel instanceof PowerModelHostSimple powerModelHost
+                                        ? powerModelHost.getStaticPower()
+                                        : 0;
 
-                                final double hostStaticPowerByVm =
-                                        hostStaticPower
-                                                / Math.max(
+                                final double hostStaticPowerByVm = hostStaticPower
+                                        / Math.max(
                                                 1,
                                                 vm.getHost()
                                                         .getVmCreatedList()
                                                         .size());
 
-                                final double vmRelativeCpuUtilization =
-                                        cpuMean
-                                                / Math.max(
+                                final double vmRelativeCpuUtilization = cpuMean
+                                        / Math.max(
                                                 1,
                                                 vm.getHost()
                                                         .getVmCreatedList()
                                                         .size());
 
-                                power =
-                                        powerModel.getPower(
-                                                vmRelativeCpuUtilization)
-                                                - hostStaticPower
-                                                + hostStaticPowerByVm;
+                                power = powerModel.getPower(
+                                        vmRelativeCpuUtilization)
+                                        - hostStaticPower
+                                        + hostStaticPowerByVm;
                             }
 
                         } catch (final Exception e) {
 
-                            status =
-                                    "ERROR: "
-                                            + e.getMessage();
+                            status = "ERROR: "
+                                    + e.getMessage();
                         }
                     }
                 }
@@ -757,11 +710,9 @@ public class Shared {
             final CloudSimPlus simulation,
             final VmHostEventInfo info) {
 
-        final Vm vm =
-                info.getVm();
+        final Vm vm = info.getVm();
 
-        final Host targetHost =
-                info.getHost();
+        final Host targetHost = info.getHost();
 
         System.out.printf(
                 "# %.2f: %s started migrating to %s (you can perform any operation you want here)%n",
@@ -793,7 +744,7 @@ public class Shared {
 
                     if (clock.getTime() <= 2
                             || (clock.getTime() >= 11
-                            && clock.getTime() <= 15)) {
+                                    && clock.getTime() <= 15)) {
 
                         showVmAllocatedMips(
                                 vm,
@@ -807,8 +758,7 @@ public class Shared {
             final List<Host> hostList,
             final VmHostEventInfo info) {
 
-        final Host host =
-                info.getHost();
+        final Host host = info.getHost();
 
         System.out.printf(
                 "# %.2f: %s finished migrating to %s (you can perform any operation you want here)%n",

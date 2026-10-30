@@ -20,14 +20,11 @@ import java.util.Map;
  */
 public final class MigrationCsvWriter {
 
-    private static final Path RESULTS_DIR =
-            Path.of("migrations_results");
+    private static final Path RESULTS_DIR = Path.of("migrations_results");
 
-    private static final Path OUTPUT_FILE =
-            RESULTS_DIR.resolve("migration_counts.csv");
+    private static final Path OUTPUT_FILE = RESULTS_DIR.resolve("migration_counts.csv");
 
-    private static final String HEADER =
-            "Strategy,PlannedMigrations,StartedMigrations,CompletedMigrations,"
+    private static final String HEADER = "Strategy,PlannedMigrations,StartedMigrations,CompletedMigrations,"
             + "SuccessfulMigrations,FailedMigrations,NotStartedMigrations,UnfinishedMigrations";
 
     private MigrationCsvWriter() {
@@ -43,62 +40,52 @@ public final class MigrationCsvWriter {
 
         if (strategy == null || strategy.isBlank()) {
             throw new IllegalArgumentException(
-                    "Strategy name cannot be null or blank."
-            );
+                    "Strategy name cannot be null or blank.");
         }
 
         if (tracker == null) {
             throw new IllegalArgumentException(
-                    "MigrationTracker cannot be null."
-            );
+                    "MigrationTracker cannot be null.");
         }
 
         if (!tracker.isConsistent()) {
             throw new IllegalStateException(
                     "Cannot export inconsistent migration counters "
-                    + "for strategy: " + strategy
-            );
+                            + "for strategy: " + strategy);
         }
 
         Files.createDirectories(RESULTS_DIR);
 
-        final Map<String, String> rowsByStrategy =
-                readExistingRows();
+        final Map<String, String> rowsByStrategy = readExistingRows();
 
         rowsByStrategy.put(
                 strategy,
-                createRow(strategy, tracker)
-        );
+                createRow(strategy, tracker));
 
         final List<String> lines = new ArrayList<>();
 
         lines.add(HEADER);
         lines.addAll(rowsByStrategy.values());
 
-        final Path temporaryFile =
-                OUTPUT_FILE.resolveSibling(
-                        OUTPUT_FILE.getFileName() + ".tmp"
-                );
+        final Path temporaryFile = OUTPUT_FILE.resolveSibling(
+                OUTPUT_FILE.getFileName() + ".tmp");
 
         Files.write(
                 temporaryFile,
                 lines,
-                StandardCharsets.UTF_8
-        );
+                StandardCharsets.UTF_8);
 
         try {
             Files.move(
                     temporaryFile,
                     OUTPUT_FILE,
                     StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-            );
+                    StandardCopyOption.ATOMIC_MOVE);
         } catch (final AtomicMoveNotSupportedException e) {
             Files.move(
                     temporaryFile,
                     OUTPUT_FILE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
+                    StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -114,18 +101,15 @@ public final class MigrationCsvWriter {
     private static Map<String, String> readExistingRows()
             throws IOException {
 
-        final Map<String, String> rowsByStrategy =
-                new LinkedHashMap<>();
+        final Map<String, String> rowsByStrategy = new LinkedHashMap<>();
 
         if (!Files.exists(OUTPUT_FILE)) {
             return rowsByStrategy;
         }
 
-        final List<String> lines =
-                Files.readAllLines(
-                        OUTPUT_FILE,
-                        StandardCharsets.UTF_8
-                );
+        final List<String> lines = Files.readAllLines(
+                OUTPUT_FILE,
+                StandardCharsets.UTF_8);
 
         for (int i = 1; i < lines.size(); i++) {
             final String line = lines.get(i).trim();
@@ -158,8 +142,7 @@ public final class MigrationCsvWriter {
                         columns[2],
                         columns[3],
                         columns[4],
-                        columns[5]
-                );
+                        columns[5]);
 
                 rowsByStrategy.put(columns[0], convertedRow);
                 continue;
@@ -184,15 +167,13 @@ public final class MigrationCsvWriter {
                             completed,
                             successful,
                             failed,
-                            unfinished
-                    );
+                            unfinished);
 
                     rowsByStrategy.put(columns[0], convertedRow);
                 } catch (final NumberFormatException e) {
                     System.err.printf(
                             "Warning: invalid migration CSV row ignored: %s%n",
-                            line
-                    );
+                            line);
                 }
             }
         }
@@ -216,7 +197,6 @@ public final class MigrationCsvWriter {
                 tracker.getSuccessful(),
                 tracker.getFailed(),
                 tracker.getNotStarted(),
-                tracker.getUnfinished()
-        );
+                tracker.getUnfinished());
     }
 }

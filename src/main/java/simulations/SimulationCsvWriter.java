@@ -22,14 +22,11 @@ import java.util.Map;
  */
 public final class SimulationCsvWriter {
 
-    private static final Path RESULTS_DIR =
-            Path.of("migrations_results");
+    private static final Path RESULTS_DIR = Path.of("migrations_results");
 
-    private static final Path OUTPUT_FILE =
-            RESULTS_DIR.resolve("simulation_counts.csv");
+    private static final Path OUTPUT_FILE = RESULTS_DIR.resolve("simulation_counts.csv");
 
-    private static final String HEADER =
-            "Strategy,SubmittedCloudlets,FinishedCloudlets";
+    private static final String HEADER = "Strategy,SubmittedCloudlets,FinishedCloudlets";
 
     private SimulationCsvWriter() {
         // Classe utilitária: não deve ser instanciada.
@@ -44,55 +41,46 @@ public final class SimulationCsvWriter {
 
         if (strategy == null || strategy.isBlank()) {
             throw new IllegalArgumentException(
-                    "Strategy name cannot be null or blank."
-            );
+                    "Strategy name cannot be null or blank.");
         }
 
         if (broker == null) {
             throw new IllegalArgumentException(
-                    "DatacenterBroker cannot be null."
-            );
+                    "DatacenterBroker cannot be null.");
         }
 
         Files.createDirectories(RESULTS_DIR);
 
-        final Map<String, String> rowsByStrategy =
-                readExistingRows();
+        final Map<String, String> rowsByStrategy = readExistingRows();
 
         rowsByStrategy.put(
                 strategy,
-                createRow(strategy, broker)
-        );
+                createRow(strategy, broker));
 
         final List<String> lines = new ArrayList<>();
 
         lines.add(HEADER);
         lines.addAll(rowsByStrategy.values());
 
-        final Path temporaryFile =
-                OUTPUT_FILE.resolveSibling(
-                        OUTPUT_FILE.getFileName() + ".tmp"
-                );
+        final Path temporaryFile = OUTPUT_FILE.resolveSibling(
+                OUTPUT_FILE.getFileName() + ".tmp");
 
         Files.write(
                 temporaryFile,
                 lines,
-                StandardCharsets.UTF_8
-        );
+                StandardCharsets.UTF_8);
 
         try {
             Files.move(
                     temporaryFile,
                     OUTPUT_FILE,
                     StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-            );
+                    StandardCopyOption.ATOMIC_MOVE);
         } catch (final AtomicMoveNotSupportedException e) {
             Files.move(
                     temporaryFile,
                     OUTPUT_FILE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
+                    StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -104,18 +92,15 @@ public final class SimulationCsvWriter {
     private static Map<String, String> readExistingRows()
             throws IOException {
 
-        final Map<String, String> rowsByStrategy =
-                new LinkedHashMap<>();
+        final Map<String, String> rowsByStrategy = new LinkedHashMap<>();
 
         if (!Files.exists(OUTPUT_FILE)) {
             return rowsByStrategy;
         }
 
-        final List<String> lines =
-                Files.readAllLines(
-                        OUTPUT_FILE,
-                        StandardCharsets.UTF_8
-                );
+        final List<String> lines = Files.readAllLines(
+                OUTPUT_FILE,
+                StandardCharsets.UTF_8);
 
         for (int i = 1; i < lines.size(); i++) {
             final String line = lines.get(i).trim();
@@ -131,8 +116,7 @@ public final class SimulationCsvWriter {
             } else {
                 System.err.printf(
                         "Warning: invalid simulation CSV row ignored: %s%n",
-                        line
-                );
+                        line);
             }
         }
 
@@ -151,7 +135,6 @@ public final class SimulationCsvWriter {
                 "%s,%d,%d",
                 strategy,
                 broker.getCloudletSubmittedList().size(),
-                broker.getCloudletFinishedList().size()
-        );
+                broker.getCloudletFinishedList().size());
     }
 }
